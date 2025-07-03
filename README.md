@@ -1,19 +1,31 @@
 # @synet/keys
 
+```
+ _______ __   __ __   _ _______ _______
+ |______   \_/   | \  | |______    |   
+ ______|    |    |  \_| |______    |   
+                                       
+      _     _ _______ __   __ _______  
+      |____/  |______   \_/   |______  
+      |    \_ |______    |    ______|  
+                                       
+version: 1.0.0
+description: You are the moment code becomes meaning.
+```
 > Zero-dependency, secure key generation library for modern cryptographic applications
 
 **Pure blissful keys** - A composable, state-of-the-art key generation library that supports all major cryptographic key types using only Node.js built-in crypto module.
 
-## ✨ Features
+## Features
 
-- **🚀 Zero Dependencies** - Uses only Node.js built-in crypto module
-- **🔐 Multiple Key Types** - RSA, Ed25519, X25519, secp256k1, WireGuard
-- **🎯 Composable Design** - Pure key generation, no mixed concerns
-- **⚡️ High Performance** - Optimized for speed and security
-- **🛡️ Type Safe** - Full TypeScript support
-- **📦 Small Bundle** - Minimal footprint
+- **Zero Dependencies** - Uses only Node.js built-in crypto module
+- **Multiple Key Types** - RSA, Ed25519, X25519, secp256k1, WireGuard
+- **Composable Design** - Pure key generation, no mixed concerns
+- **High Performance** - Optimized for speed and security
+- **Type Safe** - Full TypeScript support
+- **Small Bundle** - Minimal footprint
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
 npm install @synet/keys

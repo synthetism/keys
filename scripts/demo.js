@@ -5,7 +5,7 @@
  * This demonstrates the zero-dependency key generation capabilities
  */
 
-const { generateKeyPair, getShortId, getFingerprint, derivePublicKey } = require('./dist/index.js');
+const { generateKeyPair, getShortId, getFingerprint, derivePublicKey } = require('../dist/index.js');
 
 console.log('🔑 @synet/keys - Zero-dependency key generation demo\n');
 
