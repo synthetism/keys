@@ -20,7 +20,7 @@ async function demoKey() {
     id: ed25519Key.id,
     type: ed25519Key.type,
     canSign: ed25519Key.canSign(),
-    publicKey: ed25519Key.publicKeyHex.slice(0, 40) + '...',
+    publicKey: `${ed25519Key.publicKeyHex.slice(0, 40)}...`,
     meta: ed25519Key.meta
   });
 
@@ -28,8 +28,27 @@ async function demoKey() {
     id: rsaKey.id,
     type: rsaKey.type,
     canSign: rsaKey.canSign(),
-    publicKey: rsaKey.publicKeyHex.slice(0, 40) + '...',
+    publicKey: `${rsaKey.publicKeyHex.slice(0, 40)}...`,
     meta: rsaKey.meta
+  });
+
+  console.log('\n--- Migration Demo ---');
+
+  // Simulate existing key pair (migration scenario)
+  const existingPublicKey = 'existing-public-key-12345';
+  const existingPrivateKey = 'existing-private-key-12345';
+  
+  const migratedKey = Key.fromKeyPair('ed25519', existingPublicKey, existingPrivateKey, { 
+    name: 'Migrated Key',
+    source: 'legacy-system'
+  });
+  
+  console.log('✅ Migrated existing key:', {
+    id: migratedKey.id,
+    type: migratedKey.type,
+    canSign: migratedKey.canSign(),
+    publicKey: migratedKey.publicKeyHex,
+    meta: migratedKey.meta
   });
 
   console.log('\n--- Signing Demo ---');
@@ -39,7 +58,7 @@ async function demoKey() {
 
   try {
     const signature = await ed25519Key.sign(data);
-    console.log('✅ Signature created:', signature.slice(0, 50) + '...');
+    console.log(`✅ Signature created: ${signature.slice(0, 50)}...`);
 
     const isValid = await ed25519Key.verify(data, signature);
     console.log('✅ Signature verification:', isValid ? 'VALID' : 'INVALID');
@@ -57,7 +76,7 @@ async function demoKey() {
     id: publicKey.id,
     type: publicKey.type,
     canSign: publicKey.canSign(),
-    publicKey: publicKey.publicKeyHex.slice(0, 40) + '...'
+    publicKey: `${publicKey.publicKeyHex.slice(0, 40)}...`
   });
 
   try {
@@ -110,7 +129,7 @@ async function demoKey() {
   console.log('\n--- Performance Demo ---');
 
   const startTime = performance.now();
-  const keys = [];
+  const keys: Key[] = [];
   
   for (let i = 0; i < 100; i++) {
     keys.push(Key.generate('ed25519', { name: `key-${i}` }));

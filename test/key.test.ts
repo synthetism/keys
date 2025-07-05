@@ -26,6 +26,17 @@ describe('Key Unit', () => {
     expect(key.meta.name).toBe('test-key');
   });
 
+  it('should create key from existing key pair', () => {
+    const existingPublicKey = 'existing-public-key-hex';
+    const existingPrivateKey = 'existing-private-key-hex';
+    
+    const key = Key.fromKeyPair('ed25519', existingPublicKey, existingPrivateKey, { name: 'migrated-key' });
+    
+    expect(key.publicKeyHex).toBe(existingPublicKey);
+    expect(key.canSign()).toBe(true);
+    expect(key.meta.name).toBe('migrated-key');
+  });
+
   it('should generate different key types', () => {
     const ed25519Key = Key.generate('ed25519');
     const rsaKey = Key.generate('rsa');

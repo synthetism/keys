@@ -137,7 +137,7 @@ export class Key {
   private constructor(options: {
     id?: string;
     publicKeyHex?: string;
-    privateKeyInternal?: string;
+    privateKeyHex?: string;
     type: KeyType;
     meta?: KeyMeta;
     signer?: ISigner;
@@ -147,14 +147,26 @@ export class Key {
     this.meta = options.meta || {};
     this.signer = options.signer;
 
-    // Generate key pair if not provided (for signer-based keys)
-    if (!options.publicKeyHex && !options.signer) {
+    // Handle key pair scenarios
+    if (options.publicKeyHex && options.privateKeyHex) {
+      // Use provided existing key pair (migration support)
+      this.publicKeyHex = options.publicKeyHex;
+      this.privateKeyInternal = options.privateKeyHex;
+    } else if (options.publicKeyHex && options.signer) {
+      // Public key with external signer
+      this.publicKeyHex = options.publicKeyHex;
+      this.privateKeyInternal = undefined;
+    } else if (options.publicKeyHex && !options.signer) {
+      // Public-only key (verification only)
+      this.publicKeyHex = options.publicKeyHex;
+      this.privateKeyInternal = undefined;
+    } else if (!options.publicKeyHex && !options.signer) {
+      // Generate new key pair (secure default)
       const keyPair = generateKeyPair(this.type);
       this.publicKeyHex = keyPair.publicKey;
       this.privateKeyInternal = keyPair.privateKey;
     } else {
-      this.publicKeyHex = options.publicKeyHex || '';
-      this.privateKeyInternal = options.privateKeyInternal;
+      throw new Error('Invalid key configuration: must provide either publicKeyHex or allow key generation');
     }
 
     // Initialize unit DNA
@@ -227,6 +239,7 @@ export class Key {
     
     console.log('🏗️ Static Creation Methods:');
     console.log('  Key.generate(type, meta?)           // Generate new key pair');
+    console.log('  Key.fromKeyPair(type, pub, priv)    // Use existing key pair (migration)');
     console.log('  Key.createWithSigner(type, signer)  // Use external signer');
     console.log('  Key.createPublic(type, publicKey)   // Public key only');
     console.log('  Key.help()                          // Show this help');
@@ -266,6 +279,23 @@ export class Key {
   static generate(type: KeyType, meta?: KeyMeta): Key {
     return new Key({
       type,
+      meta,
+    });
+  }
+
+  /**
+   * Create a key from existing key pair (migration support)
+   */
+  static fromKeyPair(
+    type: KeyType, 
+    publicKeyHex: string, 
+    privateKeyHex: string, 
+    meta?: KeyMeta
+  ): Key {
+    return new Key({
+      type,
+      publicKeyHex,
+      privateKeyHex,
       meta,
     });
   }
