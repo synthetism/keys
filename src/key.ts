@@ -1,20 +1,21 @@
 /**
- * Pure Key and Signer Architecture for @synet/credential
+ * Pure Key Unit Architecture for @synet/keys
  * 
- * This module provides a clean, composable, and secure key/signing model
- * that works for both simple (direct keys) and enterprise (vault/HSM) use cases.
+ * This module provides a clean, composable, and secure key unit
+ * that generates keys internally and never exposes private key material.
  * 
  * Key design principles:
- * - Pure, dependency-free functions
+ * - Pure, dependency-free unit
  * - Type safety with progressive security
  * - Composable architecture
  * - Vault/HSM ready
- * - Zero magic abstractions
+ * - Internal key generation only
  * 
  * @author Synet Team
  */
 
 import { createId } from './utils';
+import { generateKeyPair, type KeyType } from './keys';
 
 /**
  * Unit schema interface for Key unit
@@ -92,7 +93,7 @@ function base64urlDecode(data: string): string {
  * Signer interface for signing operations
  * This abstraction allows for vault/HSM implementations
  */
-export interface Signer {
+export interface ISigner {
   /**
    * Sign data with this signer
    */
@@ -122,36 +123,45 @@ export interface KeyMeta {
 
 /**
  * Key unit - the core key abstraction
+ * Generates keys internally and never exposes private key material
  */
 export class Key {
   public readonly id: string;
   public readonly publicKeyHex: string;
-  public readonly privateKeyHex?: string;
-  public readonly type: string;
+  public readonly type: KeyType;
   public readonly meta: KeyMeta;
-  public readonly signer?: Signer;
+  public readonly signer?: ISigner;
+  private readonly privateKeyInternal?: string;
   private readonly unitDNA: UnitSchema;
 
-  constructor(options: {
+  private constructor(options: {
     id?: string;
-    publicKeyHex: string;
-    privateKeyHex?: string;
-    type?: string;
+    publicKeyHex?: string;
+    privateKeyInternal?: string;
+    type: KeyType;
     meta?: KeyMeta;
-    signer?: Signer;
+    signer?: ISigner;
   }) {
     this.id = options.id || createId();
-    this.publicKeyHex = options.publicKeyHex;
-    this.privateKeyHex = options.privateKeyHex;
-    this.type = options.type || 'Ed25519';
+    this.type = options.type;
     this.meta = options.meta || {};
     this.signer = options.signer;
+
+    // Generate key pair if not provided (for signer-based keys)
+    if (!options.publicKeyHex && !options.signer) {
+      const keyPair = generateKeyPair(this.type);
+      this.publicKeyHex = keyPair.publicKey;
+      this.privateKeyInternal = keyPair.privateKey;
+    } else {
+      this.publicKeyHex = options.publicKeyHex || '';
+      this.privateKeyInternal = options.privateKeyInternal;
+    }
 
     // Initialize unit DNA
     this.unitDNA = {
       name: 'Key Unit',
       version: '1.0.0',
-      description: 'I can create, manage and use cryptographic keys. Call .help() to see my capabilities.',
+      description: 'I can generate, manage and use cryptographic keys securely. Call help() to see my capabilities.',
       capabilities: this.buildCapabilities(),
       children: []
     };
@@ -161,13 +171,13 @@ export class Key {
    * Build capabilities array based on key type
    */
   private buildCapabilities(): string[] {
-    const capabilities = ['getPublicKey', 'verify', 'toJSON', 'toVerificationMethod'];
-    
+    const capabilities = ['getPublicKey', 'verify', 'toJSON', 'toVerificationMethod', 'createWithSigner', 'createPublic', 'sign','dna', 'whoami', 'help'];
+
     if (this.canSign()) {
       capabilities.push('sign');
     }
     
-    if (this.privateKeyHex) {
+    if (this.privateKeyInternal) {
       capabilities.push('toPublicKey');
     }
     
@@ -189,40 +199,11 @@ export class Key {
   }
 
   /**
-   * Display help information about this unit
+   * Display help information about this unit (removed for simplicity)
+   * Use Key.help() for documentation
    */
   help(): void {
-    console.log(`\n=== ${this.whoami} ===`);
-    console.log(`${this.unitDNA.description}\n`);
-    
-    console.log('🔑 Key Information:');
-    console.log(`  ID: ${this.id}`);
-    console.log(`  Type: ${this.type}`);
-    console.log(`  Can Sign: ${this.canSign()}`);
-    console.log(`  Public Key: ${this.publicKeyHex.substring(0, 20)}...`);
-    
-    console.log('\n🛠️ Available Capabilities:');
-    for (const cap of this.unitDNA.capabilities) {
-      console.log(`  • ${cap}()`);
-    }
-    
-    console.log('\n📖 Usage Examples:');
-    console.log('  key.getPublicKey()     // Get public key');
-    console.log('  key.sign(data)         // Sign data (if capable)');
-    console.log('  key.verify(data, sig)  // Verify signature');
-    console.log('  key.toJSON()           // Export key data');
-    console.log('  key.canSign()          // Check signing capability');
-    
-    if (this.privateKeyHex) {
-      console.log('  key.toPublicKey()      // Create public-only copy');
-    }
-    
-    console.log('\n💡 Unit Features:');
-    console.log('  • Transportable (toJSON/fromJSON)');
-    console.log('  • Composable (works with other units)');
-    console.log('  • Type-safe (DirectKey, SignerKey, PublicKey)');
-    console.log('  • Secure (private keys protected)');
-    console.log();
+    Key.help();
   }
 
   /**
@@ -230,78 +211,68 @@ export class Key {
    */
   static help(): void {
     console.log('\n=== Key Unit v1.0.0 ===');
-    console.log('I can create, manage and use cryptographic keys.\n');
+    console.log('I can generate, manage and use cryptographic keys securely.\n');
     
     console.log('🏗️ Creation Methods:');
-    console.log('  Key.create({ publicKeyHex, privateKeyHex })     // Direct key');
-    console.log('  Key.createWithSigner({ publicKeyHex, signer }) // Signer key');
-    console.log('  Key.createPublic({ publicKeyHex })             // Public key');
+    console.log('  Key.generate(type, meta?)           // Generate new key pair');
+    console.log('  Key.createWithSigner(type, signer)  // Use external signer');
+    console.log('  Key.createPublic(type, publicKey)   // Public key only');
     
-    console.log('\n🔑 Key Types:');
-    console.log('  • DirectKey   - Has private key material');
-    console.log('  • SignerKey   - Uses external signer (vault/HSM)');
-    console.log('  • PublicKey   - Verification only');
+    console.log('\n🔑 Supported Key Types:');
+    console.log('  • "ed25519"   - EdDSA signing keys');
+    console.log('  • "x25519"    - ECDH encryption keys');
+    console.log('  • "rsa"       - RSA keys');
+    console.log('  • "secp256k1" - Bitcoin/Ethereum keys');
+    console.log('  • "wireguard" - WireGuard VPN keys');
     
     console.log('\n🛠️ Core Capabilities:');
     console.log('  • getPublicKey()     - Get public key');
-    console.log('  • sign(data)         - Sign data');
+    console.log('  • sign(data)         - Sign data (if capable)');
     console.log('  • verify(data, sig)  - Verify signature');
     console.log('  • canSign()          - Check signing capability');
     console.log('  • toJSON()           - Export key data');
-    console.log('  • help()             - Show instance help');
+    console.log('  • help()             - Show help (call on instance)');
     
     console.log('\n💡 Unit Features:');
-    console.log('  • Pure and composable');
+    console.log('  • Secure key generation');
+    console.log('  • Private keys never exposed');
     console.log('  • Type-safe with progressive security');
     console.log('  • Vault/HSM ready');
-    console.log('  • Zero magic abstractions');
+    console.log('  • Composable with other units');
     console.log();
   }
 
   /**
-   * Create a new direct key (with private key material)
+   * Generate a new key pair
    */
-  static create(options: {
-    id?: string;
-    publicKeyHex: string;
-    privateKeyHex: string;
-    type?: string;
-    meta?: KeyMeta;
-  }): DirectKey {
+  static generate(type: KeyType, meta?: KeyMeta): Key {
     return new Key({
-      ...options,
-      privateKeyHex: options.privateKeyHex,
-    }) as DirectKey;
+      type,
+      meta,
+    });
   }
 
   /**
-   * Create a new signer key (with external signer)
+   * Create a key with external signer
    */
-  static createWithSigner(options: {
-    id?: string;
-    publicKeyHex: string;
-    type?: string;
-    meta?: KeyMeta;
-    signer: Signer;
-  }): SignerKey {
+  static createWithSigner(type: KeyType, publicKeyHex: string, signer: ISigner, meta?: KeyMeta): Key {
     return new Key({
-      ...options,
-      signer: options.signer,
-    }) as SignerKey;
+      type,
+      publicKeyHex,
+      signer,
+      meta,
+    });
   }
 
   /**
    * Create a public-only key (verification only)
    */
-  static createPublic(options: {
-    id?: string;
-    publicKeyHex: string;
-    type?: string;
-    meta?: KeyMeta;
-  }): PublicKey {
+  static createPublic(type: KeyType, publicKeyHex: string, meta?: KeyMeta): Key {
     return new Key({
-      ...options,
-    }) as PublicKey;
+      type,
+      publicKeyHex,
+      meta,
+    });
   }
 
   /**
@@ -315,7 +286,7 @@ export class Key {
    * Check if this key can be used for signing
    */
   canSign(): boolean {
-    return !!(this.privateKeyHex || this.signer);
+    return !!(this.privateKeyInternal || this.signer);
   }
 
   /**
@@ -326,10 +297,10 @@ export class Key {
       return await this.signer.sign(data);
     }
 
-    if (this.privateKeyHex) {
+    if (this.privateKeyInternal) {
       // Simple signing implementation for testing
       // In production, use actual crypto libraries
-      return base64urlEncode(`${data}:${this.privateKeyHex}`);
+      return base64urlEncode(`${data}:${this.privateKeyInternal}`);
     }
 
     throw new Error('Key cannot sign: no private key or signer available');
@@ -338,13 +309,8 @@ export class Key {
   /**
    * Create a public-only copy of this key
    */
-  toPublicKey(): PublicKey {
-    return Key.createPublic({
-      id: this.id,
-      publicKeyHex: this.publicKeyHex,
-      type: this.type,
-      meta: { ...this.meta },
-    });
+  toPublicKey(): Key {
+    return Key.createPublic(this.type, this.publicKeyHex, { ...this.meta });
   }
 
   /**
@@ -400,42 +366,9 @@ export class Key {
 }
 
 /**
- * Type guards for different key types
- */
-export interface DirectKey extends Key {
-  readonly privateKeyHex: string;
-  readonly signer?: never;
-}
-
-export interface SignerKey extends Key {
-  readonly privateKeyHex?: never;
-  readonly signer: Signer;
-}
-
-export interface PublicKey extends Key {
-  readonly privateKeyHex?: never;
-  readonly signer?: never;
-}
-
-/**
- * Type guards
- */
-export function isDirectKey(key: Key): key is DirectKey {
-  return !!key.privateKeyHex && !key.signer;
-}
-
-export function isSignerKey(key: Key): key is SignerKey {
-  return !!key.signer && !key.privateKeyHex;
-}
-
-export function isPublicKey(key: Key): key is PublicKey {
-  return !key.privateKeyHex && !key.signer;
-}
-
-/**
  * Simple Direct Signer - implements Signer interface using direct key material
  */
-export class DirectSigner implements Signer {
+export class DirectSigner implements ISigner {
   constructor(
     private readonly privateKeyHex: string,
     private readonly publicKeyHex: string,
