@@ -14,6 +14,7 @@
  * @author Synet Team
  */
 
+import { ValueObject } from '@synet/patterns';
 import { createId } from './utils';
 import { generateKeyPair, type KeyType } from './keys';
 
@@ -122,53 +123,27 @@ export interface KeyMeta {
 }
 
 /**
+ * Properties that define a Key Value Object
+ */
+interface IKeyProps {
+  readonly id: string;
+  readonly publicKeyHex: string;
+  readonly type: KeyType;
+  readonly meta: KeyMeta;
+  readonly signer?: ISigner;
+  readonly privateKeyInternal?: string;
+}
+
+/**
  * Key unit - the core key abstraction
  * Generates keys internally and never exposes private key material
  */
-export class Key {
-  public readonly id: string;
-  public readonly publicKeyHex: string;
-  public readonly type: KeyType;
-  public readonly meta: KeyMeta;
-  public readonly signer?: ISigner;
-  private readonly privateKeyInternal?: string;
+export class Key extends ValueObject<IKeyProps> implements CredentialKey {
   private readonly unitDNA: UnitSchema;
 
-  private constructor(options: {
-    id?: string;
-    publicKeyHex?: string;
-    privateKeyHex?: string;
-    type: KeyType;
-    meta?: KeyMeta;
-    signer?: ISigner;
-  }) {
-    this.id = options.id || createId();
-    this.type = options.type;
-    this.meta = options.meta || {};
-    this.signer = options.signer;
-
-    // Handle key pair scenarios
-    if (options.publicKeyHex && options.privateKeyHex) {
-      // Use provided existing key pair (migration support)
-      this.publicKeyHex = options.publicKeyHex;
-      this.privateKeyInternal = options.privateKeyHex;
-    } else if (options.publicKeyHex && options.signer) {
-      // Public key with external signer
-      this.publicKeyHex = options.publicKeyHex;
-      this.privateKeyInternal = undefined;
-    } else if (options.publicKeyHex && !options.signer) {
-      // Public-only key (verification only)
-      this.publicKeyHex = options.publicKeyHex;
-      this.privateKeyInternal = undefined;
-    } else if (!options.publicKeyHex && !options.signer) {
-      // Generate new key pair (secure default)
-      const keyPair = generateKeyPair(this.type);
-      this.publicKeyHex = keyPair.publicKey;
-      this.privateKeyInternal = keyPair.privateKey;
-    } else {
-      throw new Error('Invalid key configuration: must provide either publicKeyHex or allow key generation');
-    }
-
+  private constructor(props: IKeyProps) {
+    super(props);
+    
     // Initialize unit DNA
     this.unitDNA = {
       name: 'Key Unit',
@@ -177,6 +152,55 @@ export class Key {
       capabilities: this.buildCapabilities(),
       children: []
     };
+  }
+
+  /**
+   * Internal factory method that handles key generation logic
+   */
+  private static createWithOptions(options: {
+    id?: string;
+    publicKeyHex?: string;
+    privateKeyHex?: string;
+    type: KeyType;
+    meta?: KeyMeta;
+    signer?: ISigner;
+  }): Key {
+    const id = options.id || createId();
+    const meta = options.meta || {};
+    
+    // Handle key pair scenarios
+    let publicKeyHex: string;
+    let privateKeyInternal: string | undefined;
+    
+    if (options.publicKeyHex && options.privateKeyHex) {
+      // Use provided existing key pair (migration support)
+      publicKeyHex = options.publicKeyHex;
+      privateKeyInternal = options.privateKeyHex;
+    } else if (options.publicKeyHex && options.signer) {
+      // Public key with external signer
+      publicKeyHex = options.publicKeyHex;
+      privateKeyInternal = undefined;
+    } else if (options.publicKeyHex && !options.signer) {
+      // Public-only key (verification only)
+      publicKeyHex = options.publicKeyHex;
+      privateKeyInternal = undefined;
+    } else if (!options.publicKeyHex && !options.signer) {
+      // Generate new key pair (secure default)
+      const keyPair = generateKeyPair(options.type);
+      publicKeyHex = keyPair.publicKey;
+      privateKeyInternal = keyPair.privateKey;
+    } else {
+      throw new Error('Invalid key configuration: must provide either publicKeyHex or allow key generation');
+    }
+
+    return new Key({
+      id,
+      publicKeyHex,
+      type: options.type,
+      meta,
+      signer: options.signer,
+      privateKeyInternal,
+    });
   }
 
   /**
@@ -277,7 +301,7 @@ export class Key {
    * Generate a new key pair
    */
   static generate(type: KeyType, meta?: KeyMeta): Key {
-    return new Key({
+    return Key.createWithOptions({
       type,
       meta,
     });
@@ -292,7 +316,7 @@ export class Key {
     privateKeyHex: string, 
     meta?: KeyMeta
   ): Key {
-    return new Key({
+    return Key.createWithOptions({
       type,
       publicKeyHex,
       privateKeyHex,
@@ -304,7 +328,7 @@ export class Key {
    * Create a key with external signer
    */
   static createWithSigner(type: KeyType, publicKeyHex: string, signer: ISigner, meta?: KeyMeta): Key {
-    return new Key({
+    return Key.createWithOptions({
       type,
       publicKeyHex,
       signer,
@@ -316,7 +340,7 @@ export class Key {
    * Create a public-only key (verification only)
    */
   static createPublic(type: KeyType, publicKeyHex: string, meta?: KeyMeta): Key {
-    return new Key({
+    return Key.createWithOptions({
       type,
       publicKeyHex,
       meta,
@@ -369,8 +393,25 @@ export class Key {
       // Simple verification for testing
       // In production, use actual crypto libraries
       const decoded = base64urlDecode(signature);
-      const [originalData] = decoded.split(':');
-      return originalData === data;
+      const parts = decoded.split(':');
+      if (parts.length !== 2) {
+        return false;
+      }
+      
+      const [originalData, signaturePrivateKey] = parts;
+      
+      // For verification to succeed:
+      // 1. The data must match
+      // 2. The signature must have been created with a private key that corresponds to this public key
+      // Since we don't have the private key for verification, we can't verify the signature properly
+      // But we can simulate this by checking if we have the private key and it matches
+      if (this.privateKeyInternal) {
+        return originalData === data && signaturePrivateKey === this.privateKeyInternal;
+      } 
+        // For public-only keys, we can't verify signatures properly in this demo
+        // In production, this would use actual cryptographic verification
+        return originalData === data;
+     
     } catch {
       return false;
     }
@@ -411,6 +452,31 @@ export class Key {
       publicKeyHex: this.publicKeyHex,
     };
   }
+
+  // Getter methods for ValueObject properties
+  get id(): string {
+    return this.props.id;
+  }
+
+  get publicKeyHex(): string {
+    return this.props.publicKeyHex;
+  }
+
+  get type(): KeyType {
+    return this.props.type;
+  }
+
+  get meta(): KeyMeta {
+    return this.props.meta;
+  }
+
+  get signer(): ISigner | undefined {
+    return this.props.signer;
+  }
+
+  private get privateKeyInternal(): string | undefined {
+    return this.props.privateKeyInternal;
+  }
 }
 
 /**
@@ -436,4 +502,53 @@ export class DirectSigner implements ISigner {
   getAlgorithm(): string {
     return this.algorithm;
   }
+}
+
+/**
+ * Credential Key Interface - for compatibility with @synet/credential
+ * 
+ * This interface allows Keys to work seamlessly with credential operations
+ * while maintaining version independence and loose coupling.
+ */
+export interface CredentialKey {
+  /** Unique identifier for this key */
+  readonly id: string;
+  
+  /** Public key material in hex format */
+  readonly publicKeyHex: string;
+  
+  /** Key type (ed25519, rsa, etc.) */
+  readonly type: string;
+  
+  /** Key metadata */
+  readonly meta: Record<string, unknown>;
+  
+  /** Check if this key can be used for signing */
+  canSign(): boolean;
+  
+  /** Get the public key for verification */
+  getPublicKey(): string;
+  
+  /** Sign data with this key */
+  sign(data: string): Promise<string>;
+  
+  /** Verify a signature against this key */
+  verify(data: string, signature: string): Promise<boolean>;
+  
+  /** Export key as JSON (excludes private key for security) */
+  toJSON(): {
+    id: string;
+    publicKeyHex: string;
+    type: string;
+    meta: Record<string, unknown>;
+    canSign: boolean;
+  };
+  
+  /** Convert this key to a verification method */
+  toVerificationMethod(controller: string): {
+    id: string;
+    type: string;
+    controller: string;
+    publicKeyHex: string;
+  };
 }

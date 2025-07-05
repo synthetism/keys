@@ -421,6 +421,89 @@ A: Yes! Key units can export public keys and verification methods for use with a
 **Q: How do I know what a key can do?**
 A: Call `key.help()` or check `key.dna.capabilities`. Every key is self-documenting.
 
+## CredentialKey Interface Compatibility
+
+The Key unit implements the `CredentialKey` interface from `@synet/credential`, enabling seamless integration with credential systems while maintaining loose coupling and version independence.
+
+### What is CredentialKey?
+
+`CredentialKey` is an interface that defines the essential operations needed for credential signing and verification:
+
+```typescript
+// From @synet/credential/src/key.ts
+interface CredentialKey {
+  readonly id: string;
+  readonly publicKeyHex: string;
+  readonly type: string;
+  readonly meta: Record<string, unknown>;
+  
+  canSign(): boolean;
+  getPublicKey(): string;
+  sign(data: string): Promise<string>;
+  verify(data: string, signature: string): Promise<boolean>;
+  toJSON(): object;
+  toVerificationMethod(controller: string): object;
+}
+```
+
+### Automatic Compatibility
+
+All Key units automatically implement `CredentialKey`:
+
+```typescript
+import { Key } from '@synet/keys';
+import { issueVC } from '@synet/credential';
+
+// Key implements CredentialKey automatically
+const key = await Key.generate('ed25519');
+
+// Works seamlessly with credential functions
+const credential = await issueVC(
+  key, // ← Automatically compatible
+  subject,
+  type,
+  issuerDid
+);
+```
+
+### Benefits of Interface-Based Design
+
+1. **Version Independence**: Different versions of @synet/keys can coexist
+2. **Provider Flexibility**: Use any key provider that implements CredentialKey
+3. **Testing**: Easy to mock keys for testing
+4. **Loose Coupling**: Credential and key packages evolve independently
+
+### Example: Version Compatibility
+
+```typescript
+// Even with different versions, both work
+import { Key as KeyV1 } from '@synet/keys@1.0.0';
+import { Key as KeyV2 } from '@synet/keys@1.0.1';
+import { issueVC } from '@synet/credential';
+
+const keyV1 = await KeyV1.generate('ed25519');
+const keyV2 = await KeyV2.generate('ed25519');
+
+// Both work with credential functions
+await issueVC(keyV1, subject, type, issuerDid); // ✅
+await issueVC(keyV2, subject, type, issuerDid); // ✅
+```
+
+### Custom Key Providers
+
+You can implement your own key providers:
+
+```typescript
+class MyCustomKey implements CredentialKey {
+  // ... implement all interface methods
+}
+
+// Works with credential functions
+const customKey = new MyCustomKey();
+await issueVC(customKey, subject, type, issuerDid); // ✅
+```
+
+This design ensures that @synet/keys remains the preferred key provider while allowing maximum flexibility and avoiding version conflicts.
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
