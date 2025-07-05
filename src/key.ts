@@ -171,17 +171,29 @@ export class Key {
    * Build capabilities array based on key type
    */
   private buildCapabilities(): string[] {
-    const capabilities = ['getPublicKey', 'verify', 'toJSON', 'toVerificationMethod', 'createWithSigner', 'createPublic', 'sign','dna', 'whoami', 'help'];
+    const capabilities = [
+      // Core instance methods
+      'getPublicKey',
+      'verify', 
+      'toJSON',
+      'toVerificationMethod',
+      'canSign',
+      'dna',
+      'whoami', 
+      'help'
+    ];
 
+    // Add signing capability if available
     if (this.canSign()) {
       capabilities.push('sign');
     }
     
+    // Add public key creation if has private key
     if (this.privateKeyInternal) {
       capabilities.push('toPublicKey');
     }
     
-    return capabilities;
+    return capabilities.sort();
   }
 
   /**
@@ -213,10 +225,11 @@ export class Key {
     console.log('\n=== Key Unit v1.0.0 ===');
     console.log('I can generate, manage and use cryptographic keys securely.\n');
     
-    console.log('🏗️ Creation Methods:');
+    console.log('🏗️ Static Creation Methods:');
     console.log('  Key.generate(type, meta?)           // Generate new key pair');
     console.log('  Key.createWithSigner(type, signer)  // Use external signer');
     console.log('  Key.createPublic(type, publicKey)   // Public key only');
+    console.log('  Key.help()                          // Show this help');
     
     console.log('\n🔑 Supported Key Types:');
     console.log('  • "ed25519"   - EdDSA signing keys');
@@ -225,13 +238,17 @@ export class Key {
     console.log('  • "secp256k1" - Bitcoin/Ethereum keys');
     console.log('  • "wireguard" - WireGuard VPN keys');
     
-    console.log('\n🛠️ Core Capabilities:');
-    console.log('  • getPublicKey()     - Get public key');
-    console.log('  • sign(data)         - Sign data (if capable)');
-    console.log('  • verify(data, sig)  - Verify signature');
-    console.log('  • canSign()          - Check signing capability');
-    console.log('  • toJSON()           - Export key data');
-    console.log('  • help()             - Show help (call on instance)');
+    console.log('\n🛠️ Instance Methods & Capabilities:');
+    console.log('  • getPublicKey()           - Get public key');
+    console.log('  • sign(data)               - Sign data (if capable)');
+    console.log('  • verify(data, sig)        - Verify signature');
+    console.log('  • canSign()                - Check signing capability');
+    console.log('  • toPublicKey()            - Create public-only copy (if has private key)');
+    console.log('  • toJSON()                 - Export key data');
+    console.log('  • toVerificationMethod()   - Create DID verification method');
+    console.log('  • help()                   - Show help (calls static help)');
+    console.log('  • dna                      - Get unit DNA info');
+    console.log('  • whoami                   - Get unit identity');
     
     console.log('\n💡 Unit Features:');
     console.log('  • Secure key generation');
@@ -239,6 +256,7 @@ export class Key {
     console.log('  • Type-safe with progressive security');
     console.log('  • Vault/HSM ready');
     console.log('  • Composable with other units');
+    console.log('  • Self-documenting capabilities');
     console.log();
   }
 
