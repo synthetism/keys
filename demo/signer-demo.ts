@@ -7,7 +7,7 @@
  * built-in cryptographic operations for all supported key types.
  */
 
-import { Signer } from '../src/signer-first';
+import { Signer } from '../src/signer';
 
 async function demonstrateSignerUnit() {
   console.log('🔐 Signer Unit Demo - Self-Contained Cryptographic Engine\n');

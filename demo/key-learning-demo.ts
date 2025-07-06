@@ -6,7 +6,7 @@
  * Tests the teaching/learning architecture and public key validation
  */
 
-import { Signer, Key } from '../src/signer-first';
+import { Signer, Key } from '../src/index';
 
 async function demonstrateKeyLearning() {
   console.log('🔑 Key Learning Demo - Teaching/Learning Architecture with Public Key Consistency\n');

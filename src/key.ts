@@ -1,559 +1,468 @@
 /**
- * Pure Key Unit Architecture for @synet/keys
+ * Key Unit - Public-facing cryptographic key unit
+ * [🔑] Learner unit that can gain signing capabilities from Signer units
  * 
- * This module provides a clean, composable, and secure key unit
- * that generates keys internally and never exposes private key material.
- * 
- * Key design principles:
- * - Pure, dependency-free unit
- * - Type safety with progressive security
- * - Composable architecture
- * - Vault/HSM ready
- * - Internal key generation only
+ * Design principles:
+ * - Key is the public-facing unit (holds public key only)
+ * - Can learn signing capabilities from compatible Signer units
+ * - Validates public key consistency when learning
+ * - Full Unit architecture with execute, learn, teach, capabilities
  * 
  * @author Synet Team
  */
 
-import { ValueObject } from '@synet/patterns';
+import { BaseUnit, createUnitSchema } from '@synet/unit';
 import { createId } from './utils';
-import { generateKeyPair, type KeyType } from './keys';
+import type { ISigner } from './signer';
+import type { KeyType } from './keys';
 
 /**
- * Unit schema interface for Key unit
+ * Key Unit - Optional public-facing unit that learns from Signer
+ * [🔑] Focuses on identity, metadata, and learned capabilities
  */
-export interface UnitSchema {
-  name: string;
-  version: string;
-  description: string;
-  capabilities: string[];
-  children?: UnitSchema[];
-}
+export class Key extends BaseUnit {
+  private publicKeyPEM: string;
+  private keyType: KeyType;
+  private keyId: string;
+  private meta: Record<string, unknown>;
+  private signer?: ISigner;
 
-/**
- * Unit capabilities interface
- */
-export interface UnitCapabilities {
-  [key: string]: unknown;
-}
-
-/**
- * Base64url encoding utilities (simplified)
- */
-function base64urlEncode(data: string): string {
-  try {
-    // Try Node.js Buffer first
-    const nodeBuffer = (globalThis as Record<string, unknown>)?.Buffer;
-    if (nodeBuffer && typeof nodeBuffer === 'object' && 'from' in nodeBuffer) {
-      return (nodeBuffer as {
-        from: (data: string) => { toString: (encoding: string) => string };
-      }).from(data).toString('base64url');
-    }
-
-    // Fallback to browser btoa
-    const browserBtoa = (globalThis as Record<string, unknown>)?.btoa;
-    if (browserBtoa && typeof browserBtoa === 'function') {
-      return (browserBtoa as (data: string) => string)(data)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-    }
-
-    throw new Error('No base64 encoding available');
-  } catch (error) {
-    throw new Error(`Base64 encoding failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-function base64urlDecode(data: string): string {
-  try {
-    // Try Node.js Buffer first
-    const nodeBuffer = (globalThis as Record<string, unknown>)?.Buffer;
-    if (nodeBuffer && typeof nodeBuffer === 'object' && 'from' in nodeBuffer) {
-      return (nodeBuffer as {
-        from: (data: string, encoding: string) => { toString: () => string };
-      }).from(data, 'base64url').toString();
-    }
-
-    // Fallback to browser atob
-    const browserAtob = (globalThis as Record<string, unknown>)?.atob;
-    if (browserAtob && typeof browserAtob === 'function') {
-      let base64 = data.replace(/-/g, '+').replace(/_/g, '/');
-      while (base64.length % 4) {
-        base64 += '=';
-      }
-      return (browserAtob as (data: string) => string)(base64);
-    }
-
-    throw new Error('No base64 decoding available');
-  } catch (error) {
-    throw new Error(`Base64 decoding failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-/**
- * Signer interface for signing operations
- * This abstraction allows for vault/HSM implementations
- */
-export interface ISigner {
-  /**
-   * Sign data with this signer
-   */
-  sign(data: string): Promise<string>;
-
-  /**
-   * Get the public key for verification
-   */
-  getPublicKey(): string;
-
-  /**
-   * Optional: Get signing algorithm
-   */
-  getAlgorithm?(): string;
-}
-
-/**
- * Key metadata
- */
-export interface KeyMeta {
-  name?: string;
-  description?: string;
-  created?: string;
-  tags?: string[];
-  [key: string]: unknown;
-}
-
-/**
- * Properties that define a Key Value Object
- */
-interface IKeyProps {
-  readonly id: string;
-  readonly publicKeyHex: string;
-  readonly type: KeyType;
-  readonly meta: KeyMeta;
-  readonly signer?: ISigner;
-  readonly privateKeyInternal?: string;
-}
-
-/**
- * Key unit - the core key abstraction
- * Generates keys internally and never exposes private key material
- */
-export class Key extends ValueObject<IKeyProps> implements CredentialKey {
-  private readonly unitDNA: UnitSchema;
-
-  private constructor(props: IKeyProps) {
-    super(props);
-    
-    // Initialize unit DNA
-    this.unitDNA = {
-      name: 'Key Unit',
-      version: '1.0.0',
-      description: 'I can generate, manage and use cryptographic keys securely. Call help() to see my capabilities.',
-      capabilities: this.buildCapabilities(),
-      children: []
-    };
-  }
-
-  /**
-   * Internal factory method that handles key generation logic
-   */
-  private static createWithOptions(options: {
-    id?: string;
-    publicKeyHex?: string;
-    privateKeyHex?: string;
-    type: KeyType;
-    meta?: KeyMeta;
+  private constructor(props: {
+    publicKeyPEM: string;
+    keyType: KeyType;
+    meta?: Record<string, unknown>;
     signer?: ISigner;
-  }): Key {
-    const id = options.id || createId();
-    const meta = options.meta || {};
+  }) {
+    super(createUnitSchema({
+      name: 'key-unit',
+      version: '1.0.0'
+    }));
     
-    // Handle key pair scenarios
-    let publicKeyHex: string;
-    let privateKeyInternal: string | undefined;
-    
-    if (options.publicKeyHex && options.privateKeyHex) {
-      // Use provided existing key pair (migration support)
-      publicKeyHex = options.publicKeyHex;
-      privateKeyInternal = options.privateKeyHex;
-    } else if (options.publicKeyHex && options.signer) {
-      // Public key with external signer
-      publicKeyHex = options.publicKeyHex;
-      privateKeyInternal = undefined;
-    } else if (options.publicKeyHex && !options.signer) {
-      // Public-only key (verification only)
-      publicKeyHex = options.publicKeyHex;
-      privateKeyInternal = undefined;
-    } else if (!options.publicKeyHex && !options.signer) {
-      // Generate new key pair (secure default)
-      const keyPair = generateKeyPair(options.type);
-      publicKeyHex = keyPair.publicKey;
-      privateKeyInternal = keyPair.privateKey;
-    } else {
-      throw new Error('Invalid key configuration: must provide either publicKeyHex or allow key generation');
-    }
+    this.publicKeyPEM = props.publicKeyPEM;
+    this.keyType = props.keyType;
+    this.keyId = createId();
+    this.meta = { ...props.meta };
+    this.signer = props.signer;
 
-    return new Key({
-      id,
-      publicKeyHex,
-      type: options.type,
-      meta,
-      signer: options.signer,
-      privateKeyInternal,
+    // Register base capabilities
+    this._addCapability('getPublicKey', () => this.getPublicKey());
+    this._addCapability('canSign', () => this.canSign());
+    this._addCapability('toJSON', () => this.toJSON());
+    this._addCapability('toVerificationMethod', (...args: unknown[]) => 
+      this.toVerificationMethod(args[0] as string));
+    this._addCapability('useSigner', (...args: unknown[]) => 
+      this.useSigner(args[0] as ISigner));
+    this._addCapability('verify', (...args: unknown[]) => {
+      // Handle both direct strings and object with data/signature properties
+      if (typeof args[0] === 'string' && typeof args[1] === 'string') {
+        return this.verify(args[0], args[1]);
+      }
+      const obj = args[0] as { data: string; signature: string };
+      return this.verify(obj.data, obj.signature);
     });
-  }
 
-  /**
-   * Build capabilities array based on key type
-   */
-  private buildCapabilities(): string[] {
-    const capabilities = [
-      // Core instance methods
-      'getPublicKey',
-      'verify', 
-      'toJSON',
-      'toVerificationMethod',
-      'canSign',
-      'dna',
-      'whoami', 
-      'help'
-    ];
-
-    // Add signing capability if available
-    if (this.canSign()) {
-      capabilities.push('sign');
-    }
-    
-    // Add public key creation if has private key
-    if (this.privateKeyInternal) {
-      capabilities.push('toPublicKey');
-    }
-    
-    return capabilities.sort();
-  }
-
-  /**
-   * Get unit DNA information
-   */
-  get dna(): UnitSchema {
-    return { ...this.unitDNA };
-  }
-
-  /**
-   * Get unit identity and version
-   */
-  get whoami(): string {
-    return `${this.unitDNA.name} v${this.unitDNA.version}`;
-  }
-
-  /**
-   * Display help information about this unit (removed for simplicity)
-   * Use Key.help() for documentation
-   */
-  help(): void {
-    Key.help();
-  }
-
-  /**
-   * Static help method for the Key unit
-   */
-  static help(): void {
-    console.log('\n=== Key Unit v1.0.0 ===');
-    console.log('I can generate, manage and use cryptographic keys securely.\n');
-    
-    console.log('🏗️ Static Creation Methods:');
-    console.log('  Key.generate(type, meta?)           // Generate new key pair');
-    console.log('  Key.fromKeyPair(type, pub, priv)    // Use existing key pair (migration)');
-    console.log('  Key.createWithSigner(type, signer)  // Use external signer');
-    console.log('  Key.createPublic(type, publicKey)   // Public key only');
-    console.log('  Key.help()                          // Show this help');
-    
-    console.log('\n🔑 Supported Key Types:');
-    console.log('  • "ed25519"   - EdDSA signing keys');
-    console.log('  • "x25519"    - ECDH encryption keys');
-    console.log('  • "rsa"       - RSA keys');
-    console.log('  • "secp256k1" - Bitcoin/Ethereum keys');
-    console.log('  • "wireguard" - WireGuard VPN keys');
-    
-    console.log('\n🛠️ Instance Methods & Capabilities:');
-    console.log('  • getPublicKey()           - Get public key');
-    console.log('  • sign(data)               - Sign data (if capable)');
-    console.log('  • verify(data, sig)        - Verify signature');
-    console.log('  • canSign()                - Check signing capability');
-    console.log('  • toPublicKey()            - Create public-only copy (if has private key)');
-    console.log('  • toJSON()                 - Export key data');
-    console.log('  • toVerificationMethod()   - Create DID verification method');
-    console.log('  • help()                   - Show help (calls static help)');
-    console.log('  • dna                      - Get unit DNA info');
-    console.log('  • whoami                   - Get unit identity');
-    
-    console.log('\n💡 Unit Features:');
-    console.log('  • Secure key generation');
-    console.log('  • Private keys never exposed');
-    console.log('  • Type-safe with progressive security');
-    console.log('  • Vault/HSM ready');
-    console.log('  • Composable with other units');
-    console.log('  • Self-documenting capabilities');
-    console.log();
-  }
-
-  /**
-   * Generate a new key pair
-   */
-  static generate(type: KeyType, meta?: KeyMeta): Key {
-    return Key.createWithOptions({
-      type,
-      meta,
-    });
-  }
-
-  /**
-   * Create a key from existing key pair (migration support)
-   */
-  static fromKeyPair(
-    type: KeyType, 
-    publicKeyHex: string, 
-    privateKeyHex: string, 
-    meta?: KeyMeta
-  ): Key {
-    return Key.createWithOptions({
-      type,
-      publicKeyHex,
-      privateKeyHex,
-      meta,
-    });
-  }
-
-  /**
-   * Create a key with external signer
-   */
-  static createWithSigner(type: KeyType, publicKeyHex: string, signer: ISigner, meta?: KeyMeta): Key {
-    return Key.createWithOptions({
-      type,
-      publicKeyHex,
-      signer,
-      meta,
-    });
-  }
-
-  /**
-   * Create a public-only key (verification only)
-   */
-  static createPublic(type: KeyType, publicKeyHex: string, meta?: KeyMeta): Key {
-    return Key.createWithOptions({
-      type,
-      publicKeyHex,
-      meta,
-    });
-  }
-
-  /**
-   * Get the public key for verification
-   */
-  getPublicKey(): string {
-    return this.publicKeyHex;
-  }
-
-  /**
-   * Check if this key can be used for signing
-   */
-  canSign(): boolean {
-    return !!(this.privateKeyInternal || this.signer);
-  }
-
-  /**
-   * Sign data with this key
-   */
-  async sign(data: string): Promise<string> {
+    // Add signing capabilities if signer is provided
     if (this.signer) {
-      return await this.signer.sign(data);
+      this.addSigningCapabilities();
     }
-
-    if (this.privateKeyInternal) {
-      // Simple signing implementation for testing
-      // In production, use actual crypto libraries
-      return base64urlEncode(`${data}:${this.privateKeyInternal}`);
-    }
-
-    throw new Error('Key cannot sign: no private key or signer available');
   }
 
   /**
-   * Create a public-only copy of this key
+   * Create Key unit from props
    */
-  toPublicKey(): Key {
-    return Key.createPublic(this.type, this.publicKeyHex, { ...this.meta });
-  }
-
-  /**
-   * Verify a signature against this key
-   */
-  async verify(data: string, signature: string): Promise<boolean> {
+  static create(props: {
+    publicKeyPEM: string;
+    keyType: KeyType;
+    meta?: Record<string, unknown>;
+    signer?: ISigner;
+  }): Key | null {
     try {
-      // Simple verification for testing
-      // In production, use actual crypto libraries
-      const decoded = base64urlDecode(signature);
-      const parts = decoded.split(':');
-      if (parts.length !== 2) {
-        return false;
+      if (!props.publicKeyPEM || !props.keyType) {
+        return null;
       }
       
-      const [originalData, signaturePrivateKey] = parts;
+      // Validate key type
+      const validKeyTypes: KeyType[] = ['ed25519', 'rsa', 'secp256k1', 'x25519', 'wireguard'];
+      if (!validKeyTypes.includes(props.keyType)) {
+        return null;
+      }
       
-      // For verification to succeed:
-      // 1. The data must match
-      // 2. The signature must have been created with a private key that corresponds to this public key
-      // Since we don't have the private key for verification, we can't verify the signature properly
-      // But we can simulate this by checking if we have the private key and it matches
-      if (this.privateKeyInternal) {
-        return originalData === data && signaturePrivateKey === this.privateKeyInternal;
-      } 
-        // For public-only keys, we can't verify signatures properly in this demo
-        // In production, this would use actual cryptographic verification
-        return originalData === data;
-     
-    } catch {
+      // Validate public key format (basic check)
+      if (!Key.isValidPublicKey(props.publicKeyPEM, props.keyType)) {
+        return null;
+      }
+      
+      return new Key(props);
+    } catch (error) {
+      console.error('[🔑] Failed to create key:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create Key from Signer (inherits signing capability)
+   */
+  static createFromSigner(signer: ISigner, meta?: Record<string, unknown>): Key | null {
+    try {
+      if (!signer || typeof signer.getPublicKey !== 'function') {
+        return null;
+      }
+
+      const algorithm = signer.getAlgorithm?.() || 'unknown';
+      const key = new Key({
+        publicKeyPEM: signer.getPublicKey(),
+        keyType: algorithm as KeyType,
+        meta,
+        signer
+      });
+      
+      return key;
+    } catch (error) {
+      console.error('[🔑] Failed to create key from signer:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create public-only Key (verification only)
+   */
+  static createPublic(
+    publicKeyPEM: string,
+    keyType: KeyType,
+    meta?: Record<string, unknown>
+  ): Key | null {
+    try {
+      if (!publicKeyPEM || !keyType) {
+        return null;
+      }
+      return new Key({
+        publicKeyPEM,
+        keyType,
+        meta
+      });
+    } catch (error) {
+      console.error('[🔑] Failed to create public key:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Validate public key format
+   */
+  private static isValidPublicKey(publicKeyPEM: string, keyType: KeyType): boolean {
+    if (!publicKeyPEM || !keyType) {
+      return false;
+    }
+    
+    // Basic validation - reject obviously invalid keys
+    if (publicKeyPEM === 'invalid-key' || 
+        publicKeyPEM === 'corrupted-public-key' ||
+        publicKeyPEM.length < 10) {
+      return false;
+    }
+    
+    // Check for PEM format (if it starts with -----BEGIN)
+    if (publicKeyPEM.startsWith('-----BEGIN')) {
+      return true;
+    }
+    
+    // For hex format, check minimum length requirements
+    switch (keyType) {
+      case 'ed25519':
+        return publicKeyPEM.length >= 64; // 32 bytes * 2 hex chars
+      case 'secp256k1':
+        return publicKeyPEM.length >= 66; // 33 bytes * 2 hex chars (compressed)
+      case 'rsa':
+        return publicKeyPEM.length >= 100; // RSA keys are much longer
+      case 'x25519':
+        return publicKeyPEM.length >= 64; // 32 bytes * 2 hex chars
+      case 'wireguard':
+        return publicKeyPEM.length >= 44; // Base64 encoded 32 bytes
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Add signing capabilities when signer is connected
+   */
+  private addSigningCapabilities(): void {
+    if (!this.signer) return;
+    
+    this._addCapability('sign', (...args: unknown[]) => {
+      // Handle both direct string and object with data property
+      const data = typeof args[0] === 'string' ? args[0] : (args[0] as { data: string })?.data;
+      return this.sign(data);
+    });
+    
+    // Add verify capability if signer supports it
+    if ('verify' in this.signer) {
+      this._addCapability('verify', (...args: unknown[]) => {
+        // Handle both direct strings and object with data/signature properties
+        if (typeof args[0] === 'string' && typeof args[1] === 'string') {
+          return this.verify(args[0], args[1]);
+        }
+        const obj = args[0] as { data: string; signature: string };
+        return this.verify(obj.data, obj.signature);
+      });
+    }
+  }
+
+  /**
+   * Custom learn method with public key validation
+   * Overrides BaseUnit.learn() to ensure security
+   */
+  learn(capabilities: Record<string, (...args: unknown[]) => unknown>[]): boolean {
+    // Handle empty capabilities array
+    if (!capabilities || capabilities.length === 0) {
+      return false;
+    }
+    
+    // If learning from a signer, validate public key consistency
+    for (const capSet of capabilities) {
+      if (capSet.getPublicKey && typeof capSet.getPublicKey === 'function') {
+        try {
+          const learntPublicKey = capSet.getPublicKey();
+          if (learntPublicKey !== this.publicKeyPEM) {
+            console.warn('[🔑] Public key mismatch: Key has different public key than Signer');
+            return false;
+          }
+        } catch (error) {
+          // If getPublicKey fails, this is an invalid teacher
+          return false;
+        }
+      }
+    }
+    
+    try {
+      // Learn capabilities using parent method
+      super.learn(capabilities);
+      return true;
+    } catch (error) {
+      console.error('[🔑] Failed to learn capabilities:', error);
       return false;
     }
   }
 
   /**
-   * Export key as JSON (excludes private key for security)
+   * Connect external signer to this Key
+   * Uses the teaching/learning pattern with validation
    */
-  toJSON(): {
-    id: string;
-    publicKeyHex: string;
-    type: string;
-    meta: KeyMeta;
-    canSign: boolean;
-  } {
-    return {
-      id: this.id,
-      publicKeyHex: this.publicKeyHex,
-      type: this.type,
-      meta: this.meta,
-      canSign: this.canSign(),
-    };
+  useSigner(signer: ISigner): boolean {
+    try {
+      // Critical check: ensure public keys match
+      if (!signer || signer.getPublicKey() !== this.publicKeyPEM) {
+        console.warn('[🔑] Public key mismatch: Key has different public key than Signer');
+        return false;
+      }
+      
+      this.signer = signer;
+      
+      // Use teaching/learning pattern
+      const signerCapabilities = this.extractSignerCapabilities(signer);
+      this.learn([signerCapabilities]);
+      
+      return true;
+    } catch (error) {
+      console.error(`[🔑] Failed to connect signer: ${error}`);
+      return false;
+    }
   }
 
   /**
-   * Convert this key to a verification method
+   * Extract capabilities from signer if it doesn't support teach()
    */
-  toVerificationMethod(controller: string): {
-    id: string;
-    type: string;
-    controller: string;
-    publicKeyHex: string;
-  } {
+  private extractSignerCapabilities(signer: ISigner): Record<string, (...args: unknown[]) => unknown> {
+    const capabilities: Record<string, (...args: unknown[]) => unknown> = {
+      sign: (...args: unknown[]) => signer.sign(args[0] as string),
+      getPublicKey: () => signer.getPublicKey()
+    };
+    
+    // Add verify if supported
+    if ('verify' in signer && typeof (signer as ISigner & { verify?: unknown }).verify === 'function') {
+      const signerWithVerify = signer as ISigner & { verify(data: string, signature: string): Promise<boolean> };
+      capabilities.verify = (...args: unknown[]) => signerWithVerify.verify(args[0] as string, args[1] as string);
+    }
+    
+    return capabilities;
+  }
+
+  // Unit implementation
+  whoami(): string {
+    const capability = this.canSign() ? 'with signing capability' : 'with verification-only capability';
+    return `[🔑] Key Unit - ${this.keyType} public key (${this.keyId.slice(0, 8)}) ${capability}`;
+  }
+
+  capabilities(): string[] {
+    return this._getAllCapabilities();
+  }
+
+  help(): void {
+    console.log(`
+[🔑] Key Unit - Public-Facing Cryptographic Key
+
+Identity: ${this.whoami()}
+Algorithm: ${this.keyType}
+Can Sign: ${this.canSign()}
+
+Core Capabilities:
+- getPublicKey(): Get public key for sharing
+- canSign(): Check if key can sign data
+- toJSON(): Export key information
+- toVerificationMethod(): DID verification method
+- useSigner(signer): Connect external signer
+
+${this.canSign() ? `
+Signing Capabilities (learned):
+- sign(data): Sign data using connected signer
+- verify(data, signature): Verify signatures
+` : ''}
+
+Unit Operations:
+- execute(capability, ...args): Execute any capability
+- learn(capabilities): Learn capabilities from teachers
+- teach(): Share capabilities with other units
+- capabilities(): List all available capabilities
+
+Security:
+- Public key only (no private key exposure)
+- Validates public key consistency when learning
+- Can learn from Signer units through useSigner()
+
+Examples:
+  const key = Key.createPublic(publicKey, 'ed25519', { name: 'my-key' });
+  key.useSigner(signer); // Learn signing capabilities
+  await key.execute('sign', 'hello world');
+    `);
+  }
+
+  teach(): Record<string, (...args: unknown[]) => unknown> {
+    const teachings: Record<string, (...args: unknown[]) => unknown> = {
+      getPublicKey: () => this.getPublicKey(),
+      canSign: () => this.canSign(),
+      toJSON: () => this.toJSON(),
+      toVerificationMethod: (...args: unknown[]) => this.toVerificationMethod(args[0] as string),
+      useSigner: (...args: unknown[]) => this.useSigner(args[0] as ISigner)
+    };
+
+    // Add signing capabilities if available
+    if (this.canSign()) {
+      teachings.sign = (...args: unknown[]) => this.sign(args[0] as string);
+      teachings.verify = (...args: unknown[]) => this.verify(args[0] as string, args[1] as string);
+    }
+
+    return teachings;
+  }
+
+  // Core key operations
+  getPublicKey(): string {
+    return this.publicKeyPEM;
+  }
+
+  canSign(): boolean {
+    return this.signer !== undefined || this.capabilities().includes('sign');
+  }
+
+  async sign(data: string): Promise<string> {
+    if (this.signer) {
+      return await this.signer.sign(data);
+    }
+    
+    // Check if we have a learned sign capability
+    if (this.capabilities().includes('sign')) {
+      return await this.execute('sign', data);
+    }
+    
+    throw new Error('[🔑] Cannot sign: no signer available. Use useSigner() or createFromSigner()');
+  }
+
+  async verify(data: string, signature: string): Promise<boolean> {
+    if (this.signer && 'verify' in this.signer) {
+      // Type guard for extended signer with verify method
+      const signerWithVerify = this.signer as ISigner & { verify(data: string, signature: string): Promise<boolean> };
+      return await signerWithVerify.verify(data, signature);
+    }
+    
+    // Perform public key verification without signer
+    return this.performPublicKeyVerification(data, signature);
+  }
+
+  /**
+   * Perform cryptographic verification using public key only
+   */
+  private performPublicKeyVerification(data: string, signature: string): boolean {
+    if (!data || !signature || !this.publicKeyPEM) {
+      return false;
+    }
+
+    try {
+      // Import crypto for verification
+      const crypto = require('node:crypto');
+      
+      switch (this.keyType) {
+        case 'ed25519':
+          return crypto.verify(
+            null,
+            Buffer.from(data),
+            {
+              key: this.publicKeyPEM,
+              format: 'pem',
+            },
+            Buffer.from(signature, 'base64')
+          );
+        case 'rsa': {
+          const verify = crypto.createVerify('SHA256');
+          verify.update(data);
+          verify.end();
+          return verify.verify(this.publicKeyPEM, signature, 'base64');
+        }
+        case 'secp256k1': {
+          const verifySecp = crypto.createVerify('SHA256');
+          verifySecp.update(data);
+          verifySecp.end();
+          return verifySecp.verify(this.publicKeyPEM, signature, 'base64');
+        }
+        case 'x25519':
+        case 'wireguard':
+          return false; // These are not for signing
+        default:
+          return false;
+      }
+    } catch (error) {
+      console.error('[🔑] Verification failed:', error);
+      return false;
+    }
+  }
+
+  toJSON(): Record<string, unknown> {
     return {
-      id: `${controller}#${this.id}`,
-      type: `${this.type}VerificationKey2020`,
-      controller,
-      publicKeyHex: this.publicKeyHex,
+      id: this.keyId,
+      publicKeyPEM: this.publicKeyPEM,
+      type: this.keyType,
+      meta: this.meta,
+      canSign: this.canSign()
     };
   }
 
-  // Getter methods for ValueObject properties
-  get id(): string {
-    return this.props.id;
+  toVerificationMethod(controller: string): Record<string, unknown> {
+    return {
+      id: `${controller}#key-${this.keyId.slice(0, 8)}`,
+      type: `${this.keyType}VerificationKey2020`,
+      controller,
+      publicKeyPEM: this.publicKeyPEM
+    };
   }
 
-  get publicKeyHex(): string {
-    return this.props.publicKeyHex;
+  // Getters
+  get id(): string {
+    return this.keyId;
   }
 
   get type(): KeyType {
-    return this.props.type;
+    return this.keyType;
   }
 
-  get meta(): KeyMeta {
-    return this.props.meta;
+  get metadata(): Record<string, unknown> {
+    return { ...this.meta };
   }
-
-  get signer(): ISigner | undefined {
-    return this.props.signer;
-  }
-
-  private get privateKeyInternal(): string | undefined {
-    return this.props.privateKeyInternal;
-  }
-}
-
-/**
- * Simple Direct Signer - implements Signer interface using direct key material
- */
-export class DirectSigner implements ISigner {
-  constructor(
-    private readonly privateKeyHex: string,
-    private readonly publicKeyHex: string,
-    private readonly algorithm: string = 'Ed25519'
-  ) {}
-
-  async sign(data: string): Promise<string> {
-    // Simple signing implementation for testing
-    // In production, use actual crypto libraries
-    return base64urlEncode(`${data}:${this.privateKeyHex}`);
-  }
-
-  getPublicKey(): string {
-    return this.publicKeyHex;
-  }
-
-  getAlgorithm(): string {
-    return this.algorithm;
-  }
-}
-
-/**
- * Credential Key Interface - for compatibility with @synet/credential
- * 
- * This interface allows Keys to work seamlessly with credential operations
- * while maintaining version independence and loose coupling.
- */
-/**
- * Minimal interface for key operations needed by credential functions
- * This interface represents what credentials need from a key - only the essential properties
- * 
- * Note: Signing and verification logic is handled by the credential functions themselves
- * using @synet/core crypto functions, not by the key. This keeps keys as pure value objects
- * and centralizes crypto logic in the credential layer.
- */
-export interface CredentialKey {
-  /** Unique identifier for this key */
-  readonly id: string;
-  
-  /** Public key material in hex format */
-  readonly publicKeyHex: string;
-  
-  /** Key type (ed25519, rsa, etc.) */
-  readonly type: string;
-  
-  /** Key metadata */
-  readonly meta: Record<string, unknown>;
-  
-  /** Check if this key can be used for signing (has private key) */
-  canSign(): boolean;
-  
-  /** Get the public key in PEM format for verification */
-  getPublicKey(): string;
-  
-  /** Get the private key in PEM format (if available) for signing */
-  getPrivateKey(): string | null;
-  
-  /** Export key as JSON (excludes private key for security) */
-  toJSON(): {
-    id: string;
-    publicKeyHex: string;
-    type: string;
-    meta: Record<string, unknown>;
-    canSign: boolean;
-  };
-  
-  /** Convert this key to a verification method */
-  toVerificationMethod(controller: string): {
-    id: string;
-    type: string;
-    controller: string;
-    publicKeyHex: string;
-  };
 }
