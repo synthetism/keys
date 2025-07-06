@@ -85,15 +85,35 @@ export class Signer extends BaseUnit implements ISigner {
   }
 
   /**
-   * Create new signer with generated key pair
+   * Generate new signer with fresh key pair
    */
-  static create(keyType: KeyType, meta?: Record<string, unknown>): Signer | null {
+  static generate(keyType: KeyType, meta?: Record<string, unknown>): Signer | null {
     try {
       const keyPair = generateKeyPair(keyType);
       if (!keyPair || !keyPair.privateKey || !keyPair.publicKey) {
         return null;
       }
       return new Signer(keyPair.privateKey, keyPair.publicKey, keyType, meta);
+    } catch (error) {
+      console.error('[🔐] Failed to generate signer:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create signer from existing key pair
+   */
+  static create(
+    privateKeyPEM: string,
+    publicKeyPEM: string,
+    keyType: KeyType,
+    meta?: Record<string, unknown>
+  ): Signer | null {
+    try {
+      if (!privateKeyPEM || !publicKeyPEM || !keyType) {
+        return null;
+      }
+      return new Signer(privateKeyPEM, publicKeyPEM, keyType, meta);
     } catch (error) {
       console.error('[🔐] Failed to create signer:', error);
       return null;
@@ -109,15 +129,8 @@ export class Signer extends BaseUnit implements ISigner {
     keyType: KeyType,
     meta?: Record<string, unknown>
   ): Signer | null {
-    try {
-      if (!privateKeyPEM || !publicKeyPEM || !keyType) {
-        return null;
-      }
-      return new Signer(privateKeyPEM, publicKeyPEM, keyType, meta);
-    } catch (error) {
-      console.error('[🔐] Failed to create signer from key pair:', error);
-      return null;
-    }
+    // This is now redundant with create(), but kept for compatibility
+    return Signer.create(privateKeyPEM, publicKeyPEM, keyType, meta);
   }
 
   // Unit implementation
@@ -381,20 +394,22 @@ export class Key extends BaseUnit {
   private meta: Record<string, unknown>;
   private signer?: ISigner;
 
-  private constructor(
-    publicKeyPEM: string,
-    keyType: KeyType,
-    meta: Record<string, unknown> = {}
-  ) {
+  private constructor(props: {
+    publicKeyPEM: string;
+    keyType: KeyType;
+    meta?: Record<string, unknown>;
+    signer?: ISigner;
+  }) {
     super(createUnitSchema({
       name: 'key-unit',
       version: '1.0.0'
     }));
     
-    this.publicKeyPEM = publicKeyPEM;
-    this.keyType = keyType;
+    this.publicKeyPEM = props.publicKeyPEM;
+    this.keyType = props.keyType;
     this.keyId = createId();
-    this.meta = { ...meta };
+    this.meta = { ...props.meta };
+    this.signer = props.signer;
 
     // Register base capabilities
     this._addCapability('getPublicKey', () => this.getPublicKey());
@@ -404,6 +419,46 @@ export class Key extends BaseUnit {
       this.toVerificationMethod(args[0] as string));
     this._addCapability('useSigner', (...args: unknown[]) => 
       this.useSigner(args[0] as ISigner));
+
+    // Add signing capabilities if signer is provided
+    if (this.signer) {
+      this.addSigningCapabilities();
+    }
+  }
+
+  /**
+   * Create Key unit from props
+   */
+  static create(props: {
+    publicKeyPEM: string;
+    keyType: KeyType;
+    meta?: Record<string, unknown>;
+    signer?: ISigner;
+  }): Key | null {
+    try {
+      if (!props.publicKeyPEM || !props.keyType) {
+        return null;
+      }
+      return new Key(props);
+    } catch (error) {
+      console.error('[🔑] Failed to create key:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Add signing capabilities when signer is connected
+   */
+  private addSigningCapabilities(): void {
+    if (!this.signer) return;
+    
+    this._addCapability('sign', (...args: unknown[]) => this.sign(args[0] as string));
+    
+    // Add verify capability if signer supports it
+    if ('verify' in this.signer) {
+      this._addCapability('verify', (...args: unknown[]) => 
+        this.verify(args[0] as string, args[1] as string));
+    }
   }
 
   /**
@@ -416,12 +471,12 @@ export class Key extends BaseUnit {
       }
 
       const algorithm = signer.getAlgorithm?.() || 'unknown';
-      const key = new Key(signer.getPublicKey(), algorithm as KeyType, meta);
-      key.signer = signer;
-      
-      // Learn signing capabilities from signer
-      key._addCapability('sign', (...args: unknown[]) => key.sign(args[0] as string));
-      key._addCapability('verify', (...args: unknown[]) => key.verify(args[0] as string, args[1] as string));
+      const key = new Key({
+        publicKeyPEM: signer.getPublicKey(),
+        keyType: algorithm as KeyType,
+        meta,
+        signer
+      });
       
       return key;
     } catch (error) {
@@ -442,7 +497,11 @@ export class Key extends BaseUnit {
       if (!publicKeyPEM || !keyType) {
         return null;
       }
-      return new Key(publicKeyPEM, keyType, meta);
+      return new Key({
+        publicKeyPEM,
+        keyType,
+        meta
+      });
     } catch (error) {
       console.error('[🔑] Failed to create public key:', error);
       return null;
@@ -450,21 +509,42 @@ export class Key extends BaseUnit {
   }
 
   /**
+   * Custom learn method with public key validation
+   * Overrides BaseUnit.learn() to ensure security
+   */
+  learn(capabilities: Record<string, (...args: unknown[]) => unknown>[]): void {
+    // If learning from a signer, validate public key consistency
+    for (const capSet of capabilities) {
+      if (capSet.getPublicKey && this.signer) {
+        const learntPublicKey = capSet.getPublicKey();
+        if (learntPublicKey !== this.publicKeyPEM) {
+          console.warn('[🔑] Public key mismatch: refusing to learn incompatible capabilities');
+          return;
+        }
+      }
+    }
+    
+    // Learn capabilities using parent method
+    super.learn(capabilities);
+  }
+
+  /**
    * Connect external signer to this Key
-   * Ensures public key consistency between Key and Signer
+   * Uses the teaching/learning pattern with validation
    */
   useSigner(signer: ISigner): boolean {
     try {
       // Critical check: ensure public keys match
       if (!signer || signer.getPublicKey() !== this.publicKeyPEM) {
-        console.warn(`[🔑] Public key mismatch: Key has different public key than Signer`);
+        console.warn('[🔑] Public key mismatch: Key has different public key than Signer');
         return false;
       }
       
       this.signer = signer;
       
-      // Learn new capabilities from the signer
-      this.learnSigningCapabilities();
+      // Use teaching/learning pattern
+      const signerCapabilities = this.extractSignerCapabilities(signer);
+      this.learn([signerCapabilities]);
       
       return true;
     } catch (error) {
@@ -474,19 +554,20 @@ export class Key extends BaseUnit {
   }
 
   /**
-   * Learn signing capabilities from the connected signer
+   * Extract capabilities from signer if it doesn't support teach()
    */
-  private learnSigningCapabilities(): void {
-    if (!this.signer) return;
+  private extractSignerCapabilities(signer: ISigner): Record<string, (...args: unknown[]) => unknown> {
+    const capabilities: Record<string, (...args: unknown[]) => unknown> = {
+      sign: (...args: unknown[]) => signer.sign(args[0] as string),
+      getPublicKey: () => signer.getPublicKey()
+    };
     
-    // Add sign capability
-    this._addCapability('sign', (...args: unknown[]) => this.sign(args[0] as string));
-    
-    // Add verify capability if signer supports it
-    if ('verify' in this.signer) {
-      this._addCapability('verify', (...args: unknown[]) => 
-        this.verify(args[0] as string, args[1] as string));
+    // Add verify if supported
+    if ('verify' in signer && typeof (signer as any).verify === 'function') {
+      capabilities.verify = (...args: unknown[]) => (signer as any).verify(args[0], args[1]);
     }
+    
+    return capabilities;
   }
 
   // Unit implementation

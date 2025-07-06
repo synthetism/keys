@@ -12,9 +12,9 @@ async function demonstrateKeyLearning() {
   console.log('🔑 Key Learning Demo - Teaching/Learning Architecture with Public Key Consistency\n');
 
   // Create a Signer
-  const signer = Signer.create('ed25519', { name: 'teacher-signer' });
+  const signer = Signer.generate('ed25519', { name: 'teacher-signer' });
   if (!signer) {
-    console.error('Failed to create signer');
+    console.error('Failed to generate signer');
     return;
   }
 
@@ -72,9 +72,9 @@ async function demonstrateKeyLearning() {
 
   // Create another signer and try to connect it (should fail)
   console.log('\n--- Wrong Signer Test ---');
-  const wrongSigner = Signer.create('ed25519', { name: 'wrong-signer' });
+  const wrongSigner = Signer.generate('ed25519', { name: 'wrong-signer' });
   if (!wrongSigner) {
-    console.error('Failed to create wrong signer');
+    console.error('Failed to generate wrong signer');
     return;
   }
 

@@ -14,9 +14,9 @@ async function demonstrateSignerUnit() {
 
   // Test Ed25519 signing
   console.log('--- Ed25519 Signing ---');
-  const ed25519Signer = Signer.create('ed25519', { name: 'test-ed25519' });
+  const ed25519Signer = Signer.generate('ed25519', { name: 'test-ed25519' });
   if (ed25519Signer) {
-    console.log('✅ Ed25519 Signer created:', ed25519Signer.whoami());
+    console.log('✅ Ed25519 Signer generated:', ed25519Signer.whoami());
     
     const data = 'Hello, cryptographic world!';
     const signature = await ed25519Signer.sign(data);
@@ -30,9 +30,9 @@ async function demonstrateSignerUnit() {
   }
 
   console.log('\n--- RSA Signing ---');
-  const rsaSigner = Signer.create('rsa', { name: 'test-rsa' });
+  const rsaSigner = Signer.generate('rsa', { name: 'test-rsa' });
   if (rsaSigner) {
-    console.log('✅ RSA Signer created:', rsaSigner.whoami());
+    console.log('✅ RSA Signer generated:', rsaSigner.whoami());
     
     const data = 'RSA signing test data';
     const signature = await rsaSigner.sign(data);
@@ -43,9 +43,9 @@ async function demonstrateSignerUnit() {
   }
 
   console.log('\n--- secp256k1 Signing ---');
-  const secp256k1Signer = Signer.create('secp256k1', { name: 'test-secp256k1' });
+  const secp256k1Signer = Signer.generate('secp256k1', { name: 'test-secp256k1' });
   if (secp256k1Signer) {
-    console.log('✅ secp256k1 Signer created:', secp256k1Signer.whoami());
+    console.log('✅ secp256k1 Signer generated:', secp256k1Signer.whoami());
     
     const data = 'Bitcoin-style signing test';
     const signature = await secp256k1Signer.sign(data);
