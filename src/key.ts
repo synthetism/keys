@@ -510,6 +510,14 @@ export class DirectSigner implements ISigner {
  * This interface allows Keys to work seamlessly with credential operations
  * while maintaining version independence and loose coupling.
  */
+/**
+ * Minimal interface for key operations needed by credential functions
+ * This interface represents what credentials need from a key - only the essential properties
+ * 
+ * Note: Signing and verification logic is handled by the credential functions themselves
+ * using @synet/core crypto functions, not by the key. This keeps keys as pure value objects
+ * and centralizes crypto logic in the credential layer.
+ */
 export interface CredentialKey {
   /** Unique identifier for this key */
   readonly id: string;
@@ -523,17 +531,14 @@ export interface CredentialKey {
   /** Key metadata */
   readonly meta: Record<string, unknown>;
   
-  /** Check if this key can be used for signing */
+  /** Check if this key can be used for signing (has private key) */
   canSign(): boolean;
   
-  /** Get the public key for verification */
+  /** Get the public key in PEM format for verification */
   getPublicKey(): string;
   
-  /** Sign data with this key */
-  sign(data: string): Promise<string>;
-  
-  /** Verify a signature against this key */
-  verify(data: string, signature: string): Promise<boolean>;
+  /** Get the private key in PEM format (if available) for signing */
+  getPrivateKey(): string | null;
   
   /** Export key as JSON (excludes private key for security) */
   toJSON(): {

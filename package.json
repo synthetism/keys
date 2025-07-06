@@ -71,6 +71,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@synet/patterns": "^2.1.6"
+    "@synet/patterns": "^2.1.6",
+    "@synet/unit": "^1.0.0"
   }
 }
