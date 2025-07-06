@@ -10,8 +10,21 @@
     } catch {
       return false;
     }
-  } key securely)
- * - Key is optional (public-facing learner unit)
+  } key securel  static create(
+    publicKeyPEM: string,
+    keyType: KeyType,
+    meta?: Record<string, unknown>
+  ): Key | null {
+    try {
+      if (!publicKeyPEM || !keyType) {
+        return null;
+      }
+      return new Key(publicKeyPEM, keyType, meta);
+    } catch (error) {
+      console.error('[🔑] Failed to create key:', error);
+      return null;
+    }
+  }optional (public-facing learner unit)
  * - Learning over injection for composition
  * - Full Unit architecture with execute, teach, capabilities
  * 
@@ -362,14 +375,14 @@ Examples:
  * [🔑] Focuses on identity, metadata, and learned capabilities
  */
 export class Key extends BaseUnit {
-  private publicKeyHex: string;
+  private publicKeyPEM: string;
   private keyType: KeyType;
   private keyId: string;
   private meta: Record<string, unknown>;
   private signer?: ISigner;
 
   private constructor(
-    publicKeyHex: string,
+    publicKeyPEM: string,
     keyType: KeyType,
     meta: Record<string, unknown> = {}
   ) {
@@ -378,7 +391,7 @@ export class Key extends BaseUnit {
       version: '1.0.0'
     }));
     
-    this.publicKeyHex = publicKeyHex;
+    this.publicKeyPEM = publicKeyPEM;
     this.keyType = keyType;
     this.keyId = createId();
     this.meta = { ...meta };
@@ -421,15 +434,15 @@ export class Key extends BaseUnit {
    * Create public-only Key (no signing capability)
    */
   static createPublic(
-    publicKeyHex: string,
+    publicKeyPEM: string,
     keyType: KeyType,
     meta?: Record<string, unknown>
   ): Key | null {
     try {
-      if (!publicKeyHex || !keyType) {
+      if (!publicKeyPEM || !keyType) {
         return null;
       }
-      return new Key(publicKeyHex, keyType, meta);
+      return new Key(publicKeyPEM, keyType, meta);
     } catch (error) {
       console.error('[🔑] Failed to create public key:', error);
       return null;
@@ -438,28 +451,45 @@ export class Key extends BaseUnit {
 
   /**
    * Connect external signer to this Key
+   * Ensures public key consistency between Key and Signer
    */
   useSigner(signer: ISigner): boolean {
     try {
-      if (!signer || signer.getPublicKey() !== this.publicKeyHex) {
+      // Critical check: ensure public keys match
+      if (!signer || signer.getPublicKey() !== this.publicKeyPEM) {
+        console.warn(`[🔑] Public key mismatch: Key has different public key than Signer`);
         return false;
       }
       
       this.signer = signer;
       
-      // Learn new capabilities
-      if (!this.capableOf('sign')) {
-        this._addCapability('sign', (...args: unknown[]) => this.sign(args[0] as string));
-      }
-      if (!this.capableOf('verify')) {
-        this._addCapability('verify', (...args: unknown[]) => this.verify(args[0] as string, args[1] as string));
-      }
+      // Learn new capabilities from the signer
+      this.learnSigningCapabilities();
       
       return true;
-    } catch {
+    } catch (error) {
+      console.error(`[🔑] Failed to connect signer: ${error}`);
       return false;
     }
   }
+
+  /**
+   * Learn signing capabilities from the connected signer
+   */
+  private learnSigningCapabilities(): void {
+    if (!this.signer) return;
+    
+    // Add sign capability
+    this._addCapability('sign', (...args: unknown[]) => this.sign(args[0] as string));
+    
+    // Add verify capability if signer supports it
+    if ('verify' in this.signer) {
+      this._addCapability('verify', (...args: unknown[]) => 
+        this.verify(args[0] as string, args[1] as string));
+    }
+  }
+
+  // Unit implementation
 
   // Unit implementation
   whoami(): string {
@@ -526,7 +556,7 @@ Examples:
 
   // Key-specific operations
   getPublicKey(): string {
-    return this.publicKeyHex;
+    return this.publicKeyPEM;
   }
 
   canSign(): boolean {
@@ -559,7 +589,7 @@ Examples:
   toJSON(): Record<string, unknown> {
     return {
       id: this.keyId,
-      publicKeyHex: this.publicKeyHex,
+      publicKeyPEM: this.publicKeyPEM,
       type: this.keyType,
       meta: this.meta,
       canSign: this.canSign()
@@ -571,7 +601,7 @@ Examples:
       id: `${controller}#key-${this.keyId.slice(0, 8)}`,
       type: `${this.keyType}VerificationKey2020`,
       controller,
-      publicKeyHex: this.publicKeyHex
+      publicKeyPEM: this.publicKeyPEM
     };
   }
 
