@@ -129,16 +129,19 @@ console.log('Key verification:', isValid);
 ```typescript
 import { Signer, Key } from '@synet/keys';
 
+// signer is created from public/private key or generated new keyPair
+
 // Create a public-only key
 const publicKey = signer.getPublicKey();
-const key = Key.createPublic(publicKey, 'ed25519');
+const key = Key.create(publicKey, 'ed25519');  
 
 // Key can verify but not sign initially
 const canVerify = await key.verify(data, signature);
 console.log('Can verify:', canVerify);
 
 // Key learns signing from a compatible signer
-const learned = await key.learn(signer);
+const learned = await key.learn([signer.teach()]);
+
 if (learned) {
   // Now the key can sign
   const newSignature = await key.sign('New data');
@@ -176,10 +179,10 @@ The primary cryptographic unit that holds private keys and performs signing oper
 - `getPublicKey(): string`
 
   - Get the public key in PEM format
-- `getKeyType(): KeyType`
+- `getAlgorithm(): KeyType`
 
   - Get the key algorithm type
-- `teach(): ISigner`
+- `teach()`
 
   - Expose signing capabilities for learning by Key units
 
@@ -207,6 +210,8 @@ A public-facing unit that can learn signing capabilities from Signer units.
 - `Key.createPublic(publicKeyPEM: string, keyType: KeyType, meta?: Record<string, unknown>): Key | null`
 
   - Alias for `Key.create()` for clarity
+- `Key.getType()` for clarity
+  - Get key type 
 
 #### Instance Methods
 
@@ -226,12 +231,13 @@ A public-facing unit that can learn signing capabilities from Signer units.
   - Get the key algorithm type
 - `useSigner(signer: Signer): boolean`
 
-  - Learn signing capabilities from a signer
+  - Use any ISigner to teach key how to sign.
   - Validates public key consistency
   - Returns true if learning successful
-- `async learn(teacher: ISigner): Promise<boolean>`
+  
+- `async learn([capabilities]): Promise<boolean>`
 
-  - Learn from any ISigner implementation
+  - Learn from any unit, including Signer. 
   - Validates public key consistency
 
 #### Unit Methods
@@ -264,6 +270,8 @@ interface ISigner {
   getAlgorithm?(): string;
 }
 ```
+
+Implement any logic and then create key with signing capabilities  `createFromSigner(MySigner:ISigner)`
 
 ## Error Handling
 
