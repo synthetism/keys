@@ -11,8 +11,8 @@
  * @author Synet Team
  */
 
-import { BaseUnit, createUnitSchema } from '@synet/unit';
-import { generateKeyPair, type KeyType } from './keys';
+import { Unit, createUnitSchema } from '@synet/unit';
+import { generateKeyPair, detectKeyFormat, pemToHex, type KeyType } from './keys';
 import { createId } from './utils';
 import * as crypto from 'node:crypto';
 
@@ -29,7 +29,7 @@ export interface ISigner {
  * Signer Unit - Primary unit for key generation and signing
  * [🔐] The source of truth for cryptographic operations
  */
-export class Signer extends BaseUnit implements ISigner {
+export class Signer extends Unit implements ISigner {
   private privateKeyPEM: string;
   private publicKeyPEM: string;
   private keyType: KeyType;
@@ -60,6 +60,7 @@ export class Signer extends BaseUnit implements ISigner {
       return this.sign(data);
     });
     this._addCapability('getPublicKey', () => this.getPublicKey());
+    this._addCapability('getPublicKeyHex', () => this.getPublicKeyHex());
     this._addCapability('verify', (...args: unknown[]) => {
       // Handle both direct strings and object with data/signature properties
       if (typeof args[0] === 'string' && typeof args[1] === 'string') {
@@ -69,8 +70,8 @@ export class Signer extends BaseUnit implements ISigner {
       return this.verify(obj.data, obj.signature);
     });
     this._addCapability('getAlgorithm', () => this.getAlgorithm());
-    this._addCapability('createKey', (...args: unknown[]) => 
-      this.createKey(args[0] as Record<string, unknown>));
+    this._addCapability('getKey', (...args: unknown[]) => 
+      this.getKey(args[0] as Record<string, unknown>));
     this._addCapability('toJSON', () => this.toJSON());
   }
 
@@ -143,7 +144,7 @@ Core Capabilities:
 - getPublicKey(): Get public key for sharing  
 - verify(data, signature): Verify signatures
 - getAlgorithm(): Get signing algorithm
-- createKey(): Create associated Key unit
+- getKey(): Get data needed to create associated Key unit
 - toJSON(): Export metadata (no private key)
 
 Unit Operations:
@@ -160,7 +161,8 @@ Security Contract:
 Try me:
   const signer = Signer.generate('ed25519', { name: 'my-signer' });
   await signer.execute('sign', 'hello world');
-  const key = await signer.execute('createKey', { name: 'my-key' });
+  const keyData = await signer.execute('getKey', { name: 'my-key' });
+  // Then use Key.createFromSigner(signer, keyData.meta) separately
   const publicKey = await signer.execute('getPublicKey');
     `);
   }
@@ -169,9 +171,10 @@ Try me:
     return {
       sign: (...args: unknown[]) => this.sign(args[0] as string),
       getPublicKey: () => this.getPublicKey(),
+      getPublicKeyHex: () => this.getPublicKeyHex(),
       verify: (...args: unknown[]) => this.verify(args[0] as string, args[1] as string),
       getAlgorithm: () => this.getAlgorithm(),
-      createKey: (...args: unknown[]) => this.createKey(args[0] as Record<string, unknown>),
+      getKey: (...args: unknown[]) => this.getKey(args[0] as Record<string, unknown>),
       toJSON: () => this.toJSON()
     };
   }
@@ -203,12 +206,21 @@ Try me:
   }
 
   /**
-   * Create associated Key unit that learns from this Signer
+   * Get data needed to create associated Key unit
+   * Returns the data needed for Key.createFromSigner() to avoid circular dependency
    */
-  createKey(meta?: Record<string, unknown>): any {
-    // Import Key dynamically to avoid circular dependency
-    const { Key } = require('./key');
-    return Key.createFromSigner(this, meta);
+  getKey(meta?: Record<string, unknown>): {
+    publicKeyPEM: string;
+    keyType: KeyType;
+    meta: Record<string, unknown>;
+    signer: ISigner;
+  } {
+    return {
+      publicKeyPEM: this.publicKeyPEM,
+      keyType: this.keyType,
+      meta: { ...meta },
+      signer: this as ISigner
+    };
   }
 
   /**
@@ -371,5 +383,19 @@ Try me:
     verify.update(data);
     verify.end();
     return verify.verify(publicKey, signature, 'base64');
+  }
+
+  /**
+   * Get public key in hex format for DID generation
+   * This allows DID generation to work immediately with hex format
+   */
+  getPublicKeyHex(): string | null {
+    try {
+      // Use the pemToHex utility from keys.ts
+      return pemToHex(this.publicKeyPEM);
+    } catch (error) {
+      console.error('[🔐] Failed to convert public key to hex:', error);
+      return null;
+    }
   }
 }

@@ -23,7 +23,8 @@ async function demonstrateKeyLearning() {
   console.log('✅ Signer public key:', `${signer.getPublicKey().slice(0, 60)}...`);
 
   // Create a Key from the same Signer (should work)
-  const associatedKey = signer.createKey({ name: 'associated-key' });
+  // Create associated Key using proper static method (no circular dependency)
+  const associatedKey = Key.createFromSigner(signer, { name: 'associated-key' });
   if (!associatedKey) {
     console.error('Failed to create associated key');
     return;

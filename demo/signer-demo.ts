@@ -8,6 +8,7 @@
  */
 
 import { Signer } from '../src/signer';
+import { Key } from '../src/key';
 
 async function demonstrateSignerUnit() {
   console.log('🔐 Signer Unit Demo - Self-Contained Cryptographic Engine\n');
@@ -78,7 +79,8 @@ async function demonstrateSignerUnit() {
 
   console.log('\n--- Key Creation ---');
   if (ed25519Signer) {
-    const associatedKey = ed25519Signer.createKey({ name: 'associated-key' });
+    // Create associated Key using proper static method
+    const associatedKey = Key.createFromSigner(ed25519Signer, { name: 'associated-key' });
     if (associatedKey) {
       console.log('✅ Associated Key created:', associatedKey.whoami());
       console.log('✅ Key can sign:', associatedKey.canSign());

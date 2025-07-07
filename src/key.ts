@@ -11,7 +11,7 @@
  * @author Synet Team
  */
 
-import { BaseUnit, createUnitSchema } from '@synet/unit';
+import { Unit, createUnitSchema } from '@synet/unit';
 import { createId } from './utils';
 import type { ISigner } from './signer';
 import type { KeyType } from './keys';
@@ -20,7 +20,7 @@ import type { KeyType } from './keys';
  * Key Unit - Optional public-facing unit that learns from Signer
  * [🔑] Focuses on identity, metadata, and learned capabilities
  */
-export class Key extends BaseUnit {
+export class Key extends Unit {
   private publicKeyPEM: string;
   private keyType: KeyType;
   private keyId: string;
@@ -48,6 +48,7 @@ export class Key extends BaseUnit {
     this._addCapability('getPublicKey', () => this.getPublicKey());
     this._addCapability('canSign', () => this.canSign());
     this._addCapability('toJSON', () => this.toJSON());
+    this._addCapability('getType', () => this.getType());
     this._addCapability('toVerificationMethod', (...args: unknown[]) => 
       this.toVerificationMethod(args[0] as string));
     this._addCapability('useSigner', (...args: unknown[]) => 
@@ -210,7 +211,7 @@ export class Key extends BaseUnit {
 
   /**
    * Custom learn method with public key validation
-   * Overrides BaseUnit.learn() to ensure security
+   * Overrides Unit.learn() to ensure security
    */
   learn(capabilities: Record<string, (...args: unknown[]) => unknown>[]): boolean {
     // Handle empty capabilities array
@@ -287,6 +288,10 @@ export class Key extends BaseUnit {
     return capabilities;
   }
 
+  getType() : string {
+    return this.keyType;
+  }
+
   // Unit implementation
   whoami(): string {
     const capability = this.canSign() ? 'with signing capability' : 'with verification-only capability';
@@ -339,6 +344,7 @@ Examples:
   teach(): Record<string, (...args: unknown[]) => unknown> {
     const teachings: Record<string, (...args: unknown[]) => unknown> = {
       getPublicKey: () => this.getPublicKey(),
+      getType: () => this.getType(),
       canSign: () => this.canSign(),
       toJSON: () => this.toJSON(),
       toVerificationMethod: (...args: unknown[]) => this.toVerificationMethod(args[0] as string),

@@ -17,7 +17,7 @@ export interface KeyPair {
 /**
  * Key encoding formats
  */
-export type KeyFormat = "pem" | "raw" | "base64";
+export type KeyFormat = "pem" | "hex" | "base64";
 
 /**
  * Generate a cryptographic key pair
@@ -69,8 +69,8 @@ function generateRsaKeyPair(format: KeyFormat): KeyPair {
  * Generate Ed25519 key pair (digital signatures)
  */
 function generateEd25519KeyPair(format: KeyFormat): KeyPair {
-  if (format === "raw" || format === "base64") {
-    // For raw format, we'll use PEM generation and extract the raw bytes
+  if (format === "hex" || format === "base64") {
+    // For hex/base64 format, we'll use DER generation and extract the raw bytes
     const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519", {
       publicKeyEncoding: { type: "spki", format: "der" },
       privateKeyEncoding: { type: "pkcs8", format: "der" },
@@ -102,8 +102,8 @@ function generateEd25519KeyPair(format: KeyFormat): KeyPair {
  * Generate X25519 key pair (key exchange, used by WireGuard)
  */
 function generateX25519KeyPair(format: KeyFormat): KeyPair {
-  if (format === "raw" || format === "base64") {
-    // For raw format, we'll use PEM generation and extract the raw bytes
+  if (format === "hex" || format === "base64") {
+    // For hex/base64 format, we'll use DER generation and extract the raw bytes
     const { publicKey, privateKey } = crypto.generateKeyPairSync("x25519", {
       publicKeyEncoding: { type: "spki", format: "der" },
       privateKeyEncoding: { type: "pkcs8", format: "der" },
@@ -169,31 +169,41 @@ function generateWireguardKeyPair(): KeyPair {
 }
 /** 
  * Extract the public key from a private key
- * @param privateKey The private key in PEM format
- * @returns The corresponding public key in PEM format, or null if extraction fails
+ * @param privateKey The private key in PEM or hex format
+ * @returns The corresponding public key in the same format, or null if extraction fails
  */
 export function derivePublicKey(privateKey: string): string | null {
   try {
-    if (
-      !privateKey ||
-      !privateKey.includes("-----BEGIN") ||
-      !privateKey.includes("-----END")
-    ) {
+    if (!privateKey) {
       return null;
     }
-    // Create a KeyObject from the private key PEM
-    const privateKeyObj = crypto.createPrivateKey({
-      key: privateKey,
-      format: "pem",
-    });
+    
+    // Check if it's PEM format
+    if (privateKey.includes("-----BEGIN") && privateKey.includes("-----END")) {
+      // Create a KeyObject from the private key PEM
+      const privateKeyObj = crypto.createPrivateKey({
+        key: privateKey,
+        format: "pem",
+      });
 
-    // Derive the public key from the private key
-    const publicKey = crypto.createPublicKey(privateKeyObj).export({
-      type: "spki",
-      format: "pem",
-    });
+      // Derive the public key from the private key
+      const publicKey = crypto.createPublicKey(privateKeyObj).export({
+        type: "spki",
+        format: "pem",
+      });
 
-    return publicKey.toString();
+      return publicKey.toString();
+    }
+    
+    // Check if it's hex format
+    if (/^[0-9a-fA-F]+$/.test(privateKey.trim())) {
+      // For hex format, we need to convert to PEM first, derive, then convert back
+      // This is a simplified approach - hex keys need proper reconstruction
+      // For now, return null as hex derivation is not implemented
+      return null;
+    }
+    
+    return null;
   } catch (error) {
     console.error("Failed to derive public key:", error);
     return null;
@@ -217,4 +227,178 @@ export function getShortId(publicKey: string): string {
  */
 export function getFingerprint(publicKey: string): string {
   return crypto.createHash("sha256").update(publicKey).digest("hex");
+}
+
+/**
+ * Key format conversion utilities
+ */
+
+/**
+ * Convert PEM key to hex format
+ * @param pemKey PEM formatted key
+ * @returns Hex string or null if conversion fails
+ */
+export function pemToHex(pemKey: string): string | null {
+  try {
+    if (!pemKey || !pemKey.includes("-----BEGIN")) {
+      return null;
+    }
+    
+    // Import the PEM key and export as DER
+    const keyObj = crypto.createPublicKey({
+      key: pemKey,
+      format: "pem",
+    });
+    
+    const der = keyObj.export({
+      type: "spki",
+      format: "der",
+    });
+    
+    // Extract the raw key bytes from DER format
+    // For Ed25519 and X25519, the key is the last 32 bytes of the SPKI structure
+    const derBuffer = Buffer.from(der);
+    
+    // SPKI structure for Ed25519: 30 2a 30 05 06 03 2b 65 70 03 21 00 [32 bytes key]
+    // SPKI structure for X25519:  30 2a 30 05 06 03 2b 65 6e 03 21 00 [32 bytes key]
+    // For these curves, we can extract the last 32 bytes
+    if (derBuffer.length >= 32) {
+      const keyBytes = derBuffer.subarray(-32);
+      return keyBytes.toString("hex");
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Failed to convert PEM to hex:", error);
+    return null;
+  }
+}
+
+/**
+ * Convert hex key to PEM format
+ * @param hexKey Hex string key
+ * @param keyType Key type for proper PEM formatting
+ * @returns PEM formatted key or null if conversion fails
+ */
+export function hexToPem(hexKey: string, keyType: KeyType): string | null {
+  try {
+    if (!hexKey || !/^[0-9a-fA-F]+$/.test(hexKey)) {
+      return null;
+    }
+    
+    const keyBuffer = Buffer.from(hexKey, "hex");
+    
+    // For Ed25519 and X25519, we need to construct the proper DER format
+    if (keyType === "ed25519" || keyType === "x25519") {
+      // Create a proper DER-encoded public key
+      const algorithmOID = keyType === "ed25519" 
+        ? Buffer.from([0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00])
+        : Buffer.from([0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e, 0x03, 0x21, 0x00]);
+      
+      const derKey = Buffer.concat([algorithmOID, keyBuffer]);
+      
+      const publicKeyObj = crypto.createPublicKey({
+        key: derKey,
+        format: "der",
+        type: "spki",
+      });
+      
+      return publicKeyObj.export({
+        type: "spki",
+        format: "pem",
+      }).toString();
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Failed to convert hex to PEM:", error);
+    return null;
+  }
+}
+
+/**
+ * Convert base64 key to hex format
+ * @param base64Key Base64 encoded key
+ * @returns Hex string or null if conversion fails
+ */
+export function base64ToHex(base64Key: string): string | null {
+  try {
+    if (!base64Key) {
+      return null;
+    }
+    
+    const buffer = Buffer.from(base64Key, "base64");
+    return buffer.toString("hex");
+  } catch (error) {
+    console.error("Failed to convert base64 to hex:", error);
+    return null;
+  }
+}
+
+/**
+ * Convert hex key to base64 format
+ * @param hexKey Hex string key
+ * @returns Base64 encoded key or null if conversion fails
+ */
+export function hexToBase64(hexKey: string): string | null {
+  try {
+    if (!hexKey || !/^[0-9a-fA-F]+$/.test(hexKey)) {
+      return null;
+    }
+    
+    const buffer = Buffer.from(hexKey, "hex");
+    return buffer.toString("base64");
+  } catch (error) {
+    console.error("Failed to convert hex to base64:", error);
+    return null;
+  }
+}
+
+/**
+ * Detect key format
+ * @param key Key in any format
+ * @returns Detected format or null if unknown
+ */
+export function detectKeyFormat(key: string): KeyFormat | null {
+  if (!key || typeof key !== "string") {
+    return null;
+  }
+  
+  // Check for PEM format
+  if (key.includes("-----BEGIN") && key.includes("-----END")) {
+    return "pem";
+  }
+  
+  // Check for hex format
+  if (/^[0-9a-fA-F]+$/.test(key.trim())) {
+    return "hex";
+  }
+  
+  // Check for base64 format (basic check)
+  if (/^[A-Za-z0-9+/]+=*$/.test(key.trim())) {
+    return "base64";
+  }
+  
+  return null;
+}
+
+/**
+ * Convert key to hex format regardless of input format
+ * @param key Key in any format
+ * @param keyType Key type (needed for PEM conversion)
+ * @returns Hex string or null if conversion fails
+ */
+export function toHex(key: string, keyType?: KeyType): string | null {
+  const format = detectKeyFormat(key);
+  
+  switch (format) {
+    case "hex":
+      return key.toLowerCase();
+    case "base64":
+      return base64ToHex(key);
+    case "pem":
+      return pemToHex(key);
+    default:
+      return null;
+  }
 }
