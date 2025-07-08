@@ -13,9 +13,9 @@
 
 import { Unit, createUnitSchema, type TeachingContract } from '@synet/unit';
 import { generateKeyPair, detectKeyFormat, pemToHex, type KeyType } from './keys';
+import { verifySignature } from './verify';
 import { createId } from './utils';
 import * as crypto from 'node:crypto';
-// Test import
 import { Key } from './key';
 
 /**
@@ -345,29 +345,10 @@ Try me:
 
   /**
    * Perform cryptographic verification based on key type
+   * Uses tested verification functions from verify.ts
    */
   private performVerification(data: string, signature: string, publicKey: string, keyType: KeyType): boolean {
-    if (!data || !signature || !publicKey) {
-      return false;
-    }
-
-    try {
-      switch (keyType) {
-        case 'ed25519':
-          return this.verifyEd25519(data, signature, publicKey);
-        case 'rsa':
-          return this.verifyRSA(data, signature, publicKey);
-        case 'secp256k1':
-          return this.verifySecp256k1(data, signature, publicKey);
-        case 'x25519':
-        case 'wireguard':
-          return false; // These are not for signing
-        default:
-          return false;
-      }
-    } catch {
-      return false;
-    }
+    return verifySignature(data, signature, publicKey, keyType);
   }
 
   /**
@@ -382,21 +363,6 @@ Try me:
   }
 
   /**
-   * Verify Ed25519 signature
-   */
-  private verifyEd25519(data: string, signature: string, publicKey: string): boolean {
-    return crypto.verify(
-      null,
-      Buffer.from(data),
-      {
-        key: publicKey,
-        format: 'pem',
-      },
-      Buffer.from(signature, 'base64')
-    );
-  }
-
-  /**
    * Sign data with RSA key
    */
   private signRSA(data: string, privateKey: string): string {
@@ -404,16 +370,6 @@ Try me:
     sign.update(data);
     sign.end();
     return sign.sign(privateKey, 'base64');
-  }
-
-  /**
-   * Verify RSA signature
-   */
-  private verifyRSA(data: string, signature: string, publicKey: string): boolean {
-    const verify = crypto.createVerify('SHA256');
-    verify.update(data);
-    verify.end();
-    return verify.verify(publicKey, signature, 'base64');
   }
 
   /**
@@ -428,16 +384,6 @@ Try me:
   }
 
   /**
-   * Verify secp256k1 signature
-   */
-  private verifySecp256k1(data: string, signature: string, publicKey: string): boolean {
-    const verify = crypto.createVerify('SHA256');
-    verify.update(data);
-    verify.end();
-    return verify.verify(publicKey, signature, 'base64');
-  }
-
-  /**
    * Get public key in hex format for DID generation
    * This allows DID generation to work immediately with hex format
    */
@@ -448,6 +394,26 @@ Try me:
     } catch (error) {
       console.error('[🔐] Failed to convert public key to hex:', error);
       return null;
+    }
+  }
+
+  /**
+   * Validate base64 format
+   */
+  private isValidBase64(str: string): boolean {
+    try {
+      // Check if string contains only valid base64 characters
+      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+      if (!base64Regex.test(str)) {
+        return false;
+      }
+      
+      // Check if the decoded and re-encoded string matches the original
+      const decoded = Buffer.from(str, 'base64');
+      const reencoded = decoded.toString('base64');
+      return reencoded === str;
+    } catch {
+      return false;
     }
   }
 }

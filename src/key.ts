@@ -21,7 +21,6 @@ export class Key extends Unit {
   private _keyType: KeyType;
   private _keyId: string;
   private _meta: Record<string, unknown>;
-  private _learnedSigner?: { sign: (data: string) => Promise<string> }; // Learned signing capability
 
   private constructor(props: {
     publicKeyPEM: string;
@@ -39,15 +38,7 @@ export class Key extends Unit {
     this._meta = { ...props.meta };
 
     // Register capabilities
-    this._addCapability('verify', (...args: unknown[]) => {
-      const data = args[0] as string;
-      const signature = args[1] as string;
-      return this.verify(data, signature);
-    });
-    this._addCapability('sign', (...args: unknown[]) => {
-      const data = args[0] as string;
-      return this.sign(data);
-    });
+    // Note: 'sign' and 'verify' capabilities are added dynamically when learned from Signer
     this._addCapability('getPublicKey', () => this.getPublicKey());
     this._addCapability('canSign', () => this.canSign());
     this._addCapability('toJSON', () => this.toJSON());
@@ -169,12 +160,21 @@ from Signer units through the teach/learn pattern.
 
   /**
    * Verify signature using public key
-   * Public keys can always verify signatures
+   * Must learn verification capability from Signer to use this method
    */
   async verify(data: string, signature: string): Promise<boolean> {
     try {
-      return this.performVerification(data, signature, this._publicKeyPEM, this._keyType);
-    } catch {
+      // Use learned verification capability (preferred and secure)
+      if (this.capabilities().includes('verify')) {
+        return this.execute('verify', data, signature);
+      }
+      
+      // No fallback - Keys must learn verification from Signer
+      throw new Error('[🔑] Cannot verify without learning verification capability from Signer. Use signer.createKey() or key.learn([signerTeaching])');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Cannot verify without learning')) {
+        throw error;
+      }
       return false;
     }
   }
@@ -183,8 +183,8 @@ from Signer units through the teach/learn pattern.
    * Sign data - uses learned signing capability if available
    */
   async sign(data: string): Promise<string> {
-    if (this._learnedSigner?.sign) {
-      return this._learnedSigner.sign(data);
+    if (this.canSign()) {
+      return this.execute('sign', data);
     }
     throw new Error('[🔑] Cannot sign with public-only key. Use signer.createKey() or key.learn([signerTeaching]) to enable signing.');
   }
@@ -194,7 +194,7 @@ from Signer units through the teach/learn pattern.
    * Returns true if signing capabilities have been learned
    */
   canSign(): boolean {
-    return !!this._learnedSigner?.sign;
+    return this.capabilities().includes('sign');
   }
 
   /**
@@ -217,60 +217,22 @@ from Signer units through the teach/learn pattern.
   }
 
   /**
-   * Perform cryptographic verification based on key type
-   */
-  private performVerification(data: string, signature: string, publicKey: string, keyType: KeyType): boolean {
-    if (!data || !signature || !publicKey) {
-      return false;
-    }
-
-    try {
-      switch (keyType) {
-        case 'ed25519':
-          return crypto.verify(
-            null,
-            Buffer.from(data),
-            {
-              key: publicKey,
-              format: 'pem',
-            },
-            Buffer.from(signature, 'base64')
-          );
-        case 'rsa': {
-          const verify = crypto.createVerify('SHA256');
-          verify.update(data);
-          verify.end();
-          return verify.verify(publicKey, signature, 'base64');
-        }
-        case 'secp256k1': {
-          const verifySecp = crypto.createVerify('SHA256');
-          verifySecp.update(data);
-          verifySecp.end();
-          return verifySecp.verify(publicKey, signature, 'base64');
-        }
-        case 'x25519':
-        case 'wireguard':
-          return false; // These are not for signing
-        default:
-          return false;
-      }
-    } catch {
-      return false;
-    }
-  }
-
-  /**
    * Override learn method to handle Signer teachings
    */
   async learn(teachings: TeachingContract[]): Promise<boolean> {
     try {
       for (const teaching of teachings) {
         if (teaching.capabilities?.sign) {
-          // Learn signing capability from Signer
-          this._learnedSigner = {
-            sign: teaching.capabilities.sign as (data: string) => Promise<string>
-          };
+          // Add both signing and verification capabilities dynamically
+          this._addCapability('sign', teaching.capabilities.sign);
           console.log(`[🔑] Key learned signing capability from ${teaching.unitId}`);
+        }
+        if (teaching.capabilities?.verify) {
+          // Learn robust verification from Signer
+          this._addCapability('verify', teaching.capabilities.verify);
+          console.log(`[🔑] Key learned verification capability from ${teaching.unitId}`);
+        }
+        if (teaching.capabilities?.sign || teaching.capabilities?.verify) {
           return true;
         }
       }
