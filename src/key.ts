@@ -153,7 +153,9 @@ from Signer units through the teach/learn pattern.
         getPublicKey: () => this._publicKeyPEM,
         getKeyType: () => this._keyType,
         getKeyId: () => this._keyId,
-        toJSON: () => this.toJSON()
+        toJSON: () => this.toJSON(),
+        sign: (...args: unknown[]) => this.sign(args[0] as string),
+        verify: (...args: unknown[]) => this.verify(args[0] as string, args[1] as string),
       }
     };
   }
@@ -206,7 +208,7 @@ from Signer units through the teach/learn pattern.
 
   toJSON(): Record<string, unknown> {
     return {
-      unitType: 'key',
+      unitId: this.dna.id,
       keyId: this._keyId,
       publicKeyPEM: this._publicKeyPEM,
       keyType: this._keyType,

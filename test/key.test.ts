@@ -172,7 +172,7 @@ describe('Key Unit - Refactored Architecture', () => {
     it('should support JSON serialization', () => {
       const json = key.toJSON();
       expect(json).toBeDefined();
-      expect(json.unitType).toBe('key');
+      expect(json.unitId).toBe('key-unit');
       expect(json.keyId).toBe(key.keyId);
       expect(json.publicKeyPEM).toBe(key.publicKeyPEM);
       expect(json.keyType).toBe(key.keyType);

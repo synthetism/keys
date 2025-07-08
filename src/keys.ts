@@ -354,6 +354,7 @@ export function hexToBase64(hexKey: string): string | null {
   }
 }
 
+
 /**
  * Detect key format
  * @param key Key in any format

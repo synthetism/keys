@@ -77,6 +77,8 @@ export class Signer extends Unit implements ISigner {
     this._addCapability('toJSON', () => this.toJSON());
   }
 
+
+
   /**
    * Generate new signer with fresh key pair
    */
@@ -197,7 +199,8 @@ Try me:
         getPublicKeyHex: () => this.getPublicKeyHex(),
         verify: (...args: unknown[]) => this.verify(args[0] as string, args[1] as string),
         getAlgorithm: () => this.getAlgorithm(),
-        toJSON: () => this.toJSON()
+        toJSON: () => this.toJSON(),
+        getKeyType: () => this.keyType,
       }
     };
   }
