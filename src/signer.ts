@@ -11,18 +11,19 @@
  * @author Synet Team
  */
 
-import { Unit, createUnitSchema } from '@synet/unit';
+import { Unit, createUnitSchema, type TeachingContract } from '@synet/unit';
 import { generateKeyPair, detectKeyFormat, pemToHex, type KeyType } from './keys';
 import { createId } from './utils';
 import * as crypto from 'node:crypto';
+// Test import
+import { Key } from './key';
 
 /**
- * ISigner interface for all signing implementations
+ * ISigner interface for external signing implementations
+ * Simplified to core signing functionality only
  */
 export interface ISigner {
   sign(data: string): Promise<string>;
-  getPublicKey(): string;
-  getAlgorithm?(): string;
 }
 
 /**
@@ -35,6 +36,7 @@ export class Signer extends Unit implements ISigner {
   private keyType: KeyType;
   private keyId: string;
   private meta: Record<string, unknown>;
+  private isigner?: ISigner; // External signer for edge cases
 
   private constructor(
     privateKeyPEM: string,
@@ -43,7 +45,7 @@ export class Signer extends Unit implements ISigner {
     meta: Record<string, unknown> = {}
   ) {
     super(createUnitSchema({
-      name: 'signer-unit',
+      id: 'signer-unit',
       version: '1.0.0'
     }));
     
@@ -123,6 +125,25 @@ export class Signer extends Unit implements ISigner {
     return Signer.create(privateKeyPEM, publicKeyPEM, keyType, meta);
   }
 
+  /**
+   * Create signer with external ISigner (edge case)
+   * For cases where signing logic is handled externally
+   */
+  static createWithSigner(isigner: ISigner, keyType: KeyType = 'ed25519', meta?: Record<string, unknown>): Signer | null {
+    try {
+      // Create a Signer with external signing capability
+      // Note: Public key should be provided in meta if needed
+      const publicKeyPEM = meta?.publicKeyPEM as string || '';
+      const signer = new Signer('', publicKeyPEM, keyType, meta);
+      signer.isigner = isigner;
+      
+      return signer;
+    } catch (error) {
+      console.error('[🔐] Failed to create signer with external ISigner:', error);
+      return null;
+    }
+  }
+
   // Unit implementation
   whoami(): string {
     return `[🔐] Signer Unit - Secure ${this.keyType} cryptographic engine (${this.keyId.slice(0, 8)})`;
@@ -167,21 +188,27 @@ Try me:
     `);
   }
 
-  teach(): Record<string, (...args: unknown[]) => unknown> {
+  teach(): TeachingContract {
     return {
-      sign: (...args: unknown[]) => this.sign(args[0] as string),
-      getPublicKey: () => this.getPublicKey(),
-      getPublicKeyHex: () => this.getPublicKeyHex(),
-      verify: (...args: unknown[]) => this.verify(args[0] as string, args[1] as string),
-      getAlgorithm: () => this.getAlgorithm(),
-      getKey: (...args: unknown[]) => this.getKey(args[0] as Record<string, unknown>),
-      toJSON: () => this.toJSON()
+      unitId: this.dna.id,
+      capabilities: {
+        sign: (...args: unknown[]) => this.sign(args[0] as string),
+        getPublicKey: () => this.getPublicKey(),
+        getPublicKeyHex: () => this.getPublicKeyHex(),
+        verify: (...args: unknown[]) => this.verify(args[0] as string, args[1] as string),
+        getAlgorithm: () => this.getAlgorithm(),
+        toJSON: () => this.toJSON()
+      }
     };
   }
 
   // ISigner implementation
   async sign(data: string): Promise<string> {
     try {
+      // Use external signer if available, otherwise use native signing
+      if (this.isigner) {
+        return this.isigner.sign(data);
+      }
       return this.performSigning(data, this.privateKeyPEM, this.keyType);
     } catch (error) {
       throw new Error(`[🔐] Signing failed: ${error}`);
@@ -194,6 +221,31 @@ Try me:
 
   getAlgorithm(): string {
     return this.keyType;
+  }
+
+  /**
+   * Create a Key unit from this Signer's key material
+   * The Key will learn signing capabilities from this Signer
+   */
+  createKey() {
+    try {
+      const key = Key.create({
+        publicKeyPEM: this.publicKeyPEM,
+        keyType: this.keyType,
+        meta: { ...this.meta }
+      });
+      
+      if (key) {
+        // Teach the key our signing capabilities
+        const teaching = this.teach();
+        key.learn([teaching]);
+      }
+      
+      return key;
+    } catch (error) {
+      console.error('[🔐] Failed to create key:', error);
+      return null;
+    }
   }
 
   // Additional capabilities
