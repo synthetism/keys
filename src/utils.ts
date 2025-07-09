@@ -31,3 +31,37 @@ export function createId(length = 24): string {
   // Combine first letter with hash, ensuring we get the right length
   return (firstLetter + base36Hash).substring(0, length);
 }
+
+/**
+ * Convert base64 to base64url encoding
+ * base64url is the URL-safe variant of base64 used in JWTs
+ * 
+ * @param base64 - Standard base64 encoded string
+ * @returns base64url encoded string
+ */
+export function base64ToBase64Url(base64: string): string {
+  return base64
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+/**
+ * Convert base64url to base64 encoding
+ * Converts JWT-style base64url back to standard base64
+ * 
+ * @param base64url - base64url encoded string
+ * @returns Standard base64 encoded string
+ */
+export function base64UrlToBase64(base64url: string): string {
+  let base64 = base64url
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  
+  // Add padding if needed
+  while (base64.length % 4) {
+    base64 += '=';
+  }
+  
+  return base64;
+}

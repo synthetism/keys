@@ -14,7 +14,7 @@
 import { Unit, createUnitSchema, type TeachingContract } from '@synet/unit';
 import { generateKeyPair, detectKeyFormat, pemToHex, type KeyType } from './keys';
 import { verifySignature } from './verify';
-import { createId } from './utils';
+import { createId, base64ToBase64Url } from './utils';
 import * as crypto from 'node:crypto';
 import { Key } from './key';
 
@@ -362,7 +362,8 @@ Try me:
       key: privateKey,
       format: 'pem',
     });
-    return signature.toString('base64');
+    const base64Signature = signature.toString('base64');
+    return base64ToBase64Url(base64Signature);
   }
 
   /**
@@ -372,7 +373,8 @@ Try me:
     const sign = crypto.createSign('SHA256');
     sign.update(data);
     sign.end();
-    return sign.sign(privateKey, 'base64');
+    const base64Signature = sign.sign(privateKey, 'base64');
+    return base64ToBase64Url(base64Signature);
   }
 
   /**
@@ -383,7 +385,8 @@ Try me:
     const sign = crypto.createSign('SHA256');
     sign.update(data);
     sign.end();
-    return sign.sign(privateKey, 'base64');
+    const base64Signature = sign.sign(privateKey, 'base64');
+    return base64ToBase64Url(base64Signature);
   }
 
   /**

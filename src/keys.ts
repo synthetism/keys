@@ -403,3 +403,47 @@ export function toHex(key: string, keyType?: KeyType): string | null {
       return null;
   }
 }
+
+/**
+ * Convert Ed25519 private key from hex to PEM format
+ * @param hexKey The hex-encoded private key (64 bytes: 32 private + 32 public)
+ * @returns PEM formatted private key or null if conversion fails
+ */
+export function hexPrivateKeyToPem(hexKey: string): string | null {
+  try {
+    if (!hexKey || !/^[0-9a-fA-F]+$/.test(hexKey)) {
+      return null;
+    }
+    
+    // Ed25519 private keys are 64 bytes (32 private + 32 public)
+    // Extract the private key part (first 32 bytes)
+    const privateKeyBytes = Buffer.from(hexKey.substring(0, 64), 'hex');
+    
+    // Create PKCS8 DER format for Ed25519 private key
+    const pkcs8Header = Buffer.from([
+      0x30, 0x2e, // SEQUENCE, 46 bytes
+      0x02, 0x01, 0x00, // INTEGER version 0
+      0x30, 0x05, // SEQUENCE, 5 bytes
+      0x06, 0x03, 0x2b, 0x65, 0x70, // OID for Ed25519
+      0x04, 0x22, // OCTET STRING, 34 bytes
+      0x04, 0x20 // OCTET STRING, 32 bytes (the actual private key)
+    ]);
+    
+    const derKey = Buffer.concat([pkcs8Header, privateKeyBytes]);
+    
+    // Create private key object and export as PEM
+    const privateKeyObj = crypto.createPrivateKey({
+      key: derKey,
+      format: 'der',
+      type: 'pkcs8'
+    });
+    
+    return privateKeyObj.export({
+      type: 'pkcs8',
+      format: 'pem'
+    }).toString();
+  } catch (error) {
+    console.error("Failed to convert hex private key to PEM:", error);
+    return null;
+  }
+}

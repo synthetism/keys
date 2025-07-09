@@ -12,6 +12,7 @@
  */
 
 import * as crypto from 'node:crypto';
+import { base64UrlToBase64 } from './utils';
 
 /**
  * Validate base64 format
@@ -40,9 +41,52 @@ export function isValidBase64(str: string): boolean {
 }
 
 /**
+ * Validate base64url format
+ * Ensures the signature is properly formatted base64url before crypto operations
+ */
+export function isValidBase64Url(str: string): boolean {
+  try {
+    // Empty strings are not valid base64url
+    if (!str || str === '') {
+      return false;
+    }
+    
+    // Check if string contains only valid base64url characters
+    const base64UrlRegex = /^[A-Za-z0-9_-]*$/;
+    if (!base64UrlRegex.test(str)) {
+      return false;
+    }
+    
+    // Try to convert to base64 and validate
+    const base64 = base64UrlToBase64(str);
+    return isValidBase64(base64);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Normalize signature to base64 format for crypto operations
+ * Accepts both base64 and base64url formats
+ */
+export function normalizeSignature(signature: string): string | null {
+  // Check if it's already valid base64
+  if (isValidBase64(signature)) {
+    return signature;
+  }
+  
+  // Check if it's base64url and convert
+  if (isValidBase64Url(signature)) {
+    return base64UrlToBase64(signature);
+  }
+  
+  return null;
+}
+
+/**
  * Verify Ed25519 signature
  * @param data The original data that was signed
- * @param signature The signature in base64 format
+ * @param signature The signature in base64 or base64url format
  * @param publicKey The public key in PEM format
  * @returns true if signature is valid, false otherwise
  */
@@ -53,8 +97,9 @@ export function verifyEd25519(data: string, signature: string, publicKey: string
       return false;
     }
     
-    // Validate base64 format first
-    if (!isValidBase64(signature)) {
+    // Normalize signature to base64 format
+    const normalizedSignature = normalizeSignature(signature);
+    if (!normalizedSignature) {
       return false;
     }
     
@@ -65,7 +110,7 @@ export function verifyEd25519(data: string, signature: string, publicKey: string
         key: publicKey,
         format: 'pem',
       },
-      Buffer.from(signature, 'base64')
+      Buffer.from(normalizedSignature, 'base64')
     );
   } catch {
     return false;
@@ -75,7 +120,7 @@ export function verifyEd25519(data: string, signature: string, publicKey: string
 /**
  * Verify RSA signature
  * @param data The original data that was signed
- * @param signature The signature in base64 format
+ * @param signature The signature in base64 or base64url format
  * @param publicKey The public key in PEM format
  * @returns true if signature is valid, false otherwise
  */
@@ -86,15 +131,16 @@ export function verifyRSA(data: string, signature: string, publicKey: string): b
       return false;
     }
     
-    // Validate base64 format first
-    if (!isValidBase64(signature)) {
+    // Normalize signature to base64 format
+    const normalizedSignature = normalizeSignature(signature);
+    if (!normalizedSignature) {
       return false;
     }
     
     const verify = crypto.createVerify('SHA256');
     verify.update(data);
     verify.end();
-    return verify.verify(publicKey, signature, 'base64');
+    return verify.verify(publicKey, normalizedSignature, 'base64');
   } catch {
     return false;
   }
@@ -103,7 +149,7 @@ export function verifyRSA(data: string, signature: string, publicKey: string): b
 /**
  * Verify secp256k1 signature
  * @param data The original data that was signed
- * @param signature The signature in base64 format
+ * @param signature The signature in base64 or base64url format
  * @param publicKey The public key in PEM format
  * @returns true if signature is valid, false otherwise
  */
@@ -114,15 +160,16 @@ export function verifySecp256k1(data: string, signature: string, publicKey: stri
       return false;
     }
     
-    // Validate base64 format first
-    if (!isValidBase64(signature)) {
+    // Normalize signature to base64 format
+    const normalizedSignature = normalizeSignature(signature);
+    if (!normalizedSignature) {
       return false;
     }
     
     const verify = crypto.createVerify('SHA256');
     verify.update(data);
     verify.end();
-    return verify.verify(publicKey, signature, 'base64');
+    return verify.verify(publicKey, normalizedSignature, 'base64');
   } catch {
     return false;
   }
@@ -131,7 +178,7 @@ export function verifySecp256k1(data: string, signature: string, publicKey: stri
 /**
  * Generic verification function that dispatches to specific algorithms
  * @param data The original data that was signed
- * @param signature The signature in base64 format
+ * @param signature The signature in base64 or base64url format
  * @param publicKey The public key in PEM format
  * @param keyType The key type/algorithm
  * @returns true if signature is valid, false otherwise
