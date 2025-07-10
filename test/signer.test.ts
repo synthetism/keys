@@ -39,11 +39,9 @@ describe('Signer Unit', () => {
         expect(signer).not.toBeNull();
         expect(signer!.metadata).toEqual(meta);
       });
-      
-      it('should return null for invalid key type', () => {
-        const signer = Signer.generate('invalid' as KeyType, {});
-        
-        expect(signer).toBeNull();
+
+      it('should throw on invalid key type', () => {
+        expect(() => Signer.generate('invalid' as KeyType, {})).toThrow('Failed to generate key pair');
       });
     });
     
@@ -276,9 +274,8 @@ describe('Signer Unit', () => {
   });
   
   describe('Error Handling', () => {
-    it('should handle invalid key type gracefully', () => {
-      const signer = Signer.generate('invalid' as KeyType, {});
-      expect(signer).toBeNull();
+    it('should throw on invalid key type', () => {
+      expect(() => Signer.generate('invalid' as KeyType, {})).toThrow('Failed to generate key pair');
     });
     
     it('should create signer even with corrupted key data (validation is deferred)', () => {

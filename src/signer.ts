@@ -82,16 +82,16 @@ export class Signer extends Unit implements ISigner {
   /**
    * Generate new signer with fresh key pair
    */
-  static generate(keyType: KeyType, meta?: Record<string, unknown>): Signer | null {
+  static generate(keyType: KeyType, meta?: Record<string, unknown>): Signer  {
     try {
       const keyPair = generateKeyPair(keyType);
       if (!keyPair || !keyPair.privateKey || !keyPair.publicKey) {
-        return null;
+        throw new Error('Failed to generate key pair');
       }
       return new Signer(keyPair.privateKey, keyPair.publicKey, keyType, meta);
     } catch (error) {
       console.error('[🔐] Failed to generate signer:', error);
-      return null;
+      throw new Error('Failed to generate key pair');
     }
   }
 
@@ -103,15 +103,15 @@ export class Signer extends Unit implements ISigner {
     publicKeyPEM: string,
     keyType: KeyType,
     meta?: Record<string, unknown>
-  ): Signer | null {
+  ): Signer {
     try {
       if (!privateKeyPEM || !publicKeyPEM || !keyType) {
-        return null;
+        throw new Error('Invalid parameters, privateKeyPEM, publicKeyPEM, and keyType are required');
       }
       return new Signer(privateKeyPEM, publicKeyPEM, keyType, meta);
     } catch (error) {
       console.error('[🔐] Failed to create signer:', error);
-      return null;
+      throw error;
     }
   }
 

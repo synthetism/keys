@@ -68,27 +68,27 @@ export class Key extends Unit {
     publicKeyPEM: string;
     keyType: KeyType;
     meta?: Record<string, unknown>;
-  }): Key | null {
+  }): Key {
     try {
       if (!props.publicKeyPEM || !props.keyType) {
-        return null;
+        throw new Error('Invalid parameters, publicKeyPEM and keyType are required');
       }
       
       // Validate key type
       const validKeyTypes: KeyType[] = ['ed25519', 'rsa', 'secp256k1', 'x25519', 'wireguard'];
       if (!validKeyTypes.includes(props.keyType)) {
-        return null;
+        throw new Error(`Invalid key type: ${props.keyType}`);
       }
       
       // Validate public key format (basic check)
       if (!Key.isValidPublicKey(props.publicKeyPEM, props.keyType)) {
-        return null;
+        throw new Error(`Invalid public key format for key type: ${props.keyType}`);
       }
       
       return new Key(props);
     } catch (error) {
       console.error('[🔑] Failed to create key:', error);
-      return null;
+      throw error;
     }
   }
 

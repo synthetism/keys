@@ -55,22 +55,13 @@ describe('Key Unit - Refactored Architecture', () => {
       });
 
       it('should return null for invalid public key', () => {
-        const key = Key.create({
+
+        expect(() => Key.create({
           publicKeyPEM: 'invalid-key',
           keyType: keyType
-        });
-        
-        expect(key).toBeNull();
+        })).toThrow('Invalid public key format for key type: ed25519');    
       });
 
-      it('should return null for missing required fields', () => {
-        const key = Key.create({
-          publicKeyPEM: '',
-          keyType: keyType
-        });
-        
-        expect(key).toBeNull();
-      });
     });
 
     describe('signer.createKey() integration', () => {
@@ -256,36 +247,33 @@ describe('Key Unit - Refactored Architecture', () => {
 
   describe('Error Handling', () => {
     it('should handle invalid key type gracefully', () => {
-      const key = Key.create({
+      expect(() => Key.create({
         publicKeyPEM: publicKey,
         keyType: 'invalid' as unknown as 'ed25519'
-      });
-      
-      expect(key).toBeNull();
+      })).toThrow('Invalid key type: invalid');
     });
 
     it('should handle corrupted public key gracefully', () => {
-      const key = Key.create({
+      expect(() => Key.create({
         publicKeyPEM: 'not-a-valid-pem-key',
         keyType: keyType
-      });
-      
-      expect(key).toBeNull();
+      })).toThrow('Invalid public key format for key type: ed25519');
+
     });
 
     it('should handle missing required fields gracefully', () => {
-      const key1 = Key.create({
+      
+      expect(() => Key.create({
         publicKeyPEM: '',
         keyType: keyType
-      });
-      
-      const key2 = Key.create({
+      })).toThrow('Invalid parameters, publicKeyPEM and keyType are required');
+
+      expect(() => Key.create({
         publicKeyPEM: publicKey,
         keyType: '' as unknown as 'ed25519'
-      });
+      })).toThrow('Invalid parameters, publicKeyPEM and keyType are required');
       
-      expect(key1).toBeNull();
-      expect(key2).toBeNull();
+   
     });
   });
 
