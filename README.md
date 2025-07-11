@@ -9,261 +9,288 @@
       |____/  |______   \_/   |______  
       |    \_ |______    |    ______|  
      
-version: 1.0.4
+version: 1.0.5
 description: You are the moment code becomes meaning.
 ```
 
-A composable, [unit-based](https://www.npmjs.com/package/@synet/unit) cryptographic signing system, built on a "signer-first" architecture.
+**Battle-tested cryptographic functions** for key generation, signing, and format conversion. Zero dependencies, 211 tests, 87%+ coverage.
 
-## Supported Algorithms
+## Why @synet/keys?
 
-- **Ed25519**: High-performance elliptic curve signing
-- **RSA**: Traditional RSA signing with PKCS1v15 and PSS padding
-- **secp256k1**: Bitcoin/Ethereum compatible elliptic curve
-- **secp256r1**: NIST P-256 elliptic curve
+✅ **Battle-tested reliability** - 211 tests, 87%+ coverage, real-world proven  
+✅ **Zero dependencies** - pure Node.js crypto, no supply chain risks  
+✅ **Format flexibility** - seamless PEM ↔ hex ↔ base64 conversions  
+✅ **Complete toolkit** - generation, signing, verification, utilities  
 
-## Architecture
+**Supported algorithms:** Ed25519, RSA, secp256k1, X25519, WireGuard
 
-The package follows a two-unit design based on the unit architecture paradigm:
+## Basic Cryptographic Functions
 
-- **Signer Unit** [🔐]: Primary cryptographic engine that holds private keys and performs signing operations
-- **Key Unit** [🔑]: Public-facing unit that can learn signing capabilities from Signer units
-
-Read more about [Unit Architecture](https://github.com/synthetism/unit)
-
-### Design Principles
-
-1. **Signer-First**: Signer is the primary unit that holds private key material and signing logic
-2. **Composable**: Key units can learn from any compatible Signer through the teaching/learning pattern
-3. **Secure**: Private keys are contained within Signer units, Key units only hold public keys
-4. **Self-Contained**: Uses only Node.js crypto, no external dependencies
-5. **Unit-Based**: Both follows Unit Architechture, with execute, learn, teach, and capabilities
-6. **Static Create Pattern**: All units use private constructor + static create() methods
-
-### Unit Creation Pattern
-
-**CRITICAL**: Both Signer and Key units follow the mandatory static create() pattern:
+### Key Generation
 
 ```typescript
-// ✅ CORRECT: Use static create() methods
-const signer = Signer.generate('ed25519');
-const key = Key.createFromSigner(signer);
+import { generateKeyPair } from '@synet/keys';
 
-// ❌ FORBIDDEN: Direct constructor calls are not allowed
-// const signer = new Signer(...); // Won't work - constructor is private
-// const key = new Key(...);       // Won't work - constructor is private
+// Generate Ed25519 key pair (recommended)
+const keyPair = generateKeyPair('ed25519');
+console.log('Private key:', keyPair.privateKey); // PEM format
+console.log('Public key:', keyPair.publicKey);   // PEM format
+
+// Generate other algorithms
+const rsaKeys = generateKeyPair('rsa');
+const secp256k1Keys = generateKeyPair('secp256k1');
+
+// Generate in hex format
+const hexKeys = generateKeyPair('ed25519', { format: 'hex' });
 ```
 
-This architectural pattern ensures:
-
-- **Controlled creation** - Proper validation and error handling
-- **Consistent interface** - All units follow the same creation pattern
-- **Prevention of invalid states** - Units cannot be created in corrupted states
-
-## Quick Start
-
-### Basic Signing with Signer
+### Direct Signing & Verification
 
 ```typescript
-import { Signer } from '@synet/keys';
+import { signWithKey, verifySignature } from '@synet/keys';
 
-// Generate a new signer
-const signer = Signer.generate('ed25519');
-if (!signer) throw new Error('Failed to generate signer');
+const data = 'Hello, World!';
 
-// Sign data
-const signature = await signer.sign('Hello, World!');
-console.log('Signature:', signature);
+// Sign with private key
+const signature = await signWithKey(data, keyPair.privateKey, 'ed25519');
 
-// Verify signature
-const isValid = await signer.verify('Hello, World!', signature);
-console.log('Valid:', isValid);
+// Verify with public key
+const isValid = await verifySignature(data, signature, keyPair.publicKey, 'ed25519');
+console.log('Valid signature:', isValid); // true
+```
+
+### Format Conversions
+
+```typescript
+import { pemToHex, hexToPem, toHex, detectKeyFormat } from '@synet/keys';
+
+// Convert PEM to hex
+const hexKey = pemToHex(keyPair.publicKey);
+
+// Convert hex to PEM  
+const pemKey = hexToPem(hexKey, 'ed25519');
+
+// Auto-detect format and convert to hex
+const format = detectKeyFormat(someKey); // 'pem' | 'hex' | 'base64'
+const hexFormat = toHex(someKey, 'ed25519'); // always returns hex
+
+// Derive public key from private
+import { derivePublicKey } from '@synet/keys';
+const publicKey = derivePublicKey(privateKeyPem);
+```
+
+### Key Utilities
+
+```typescript
+import { getShortId, getFingerprint, isValidKeyPair } from '@synet/keys';
+
+// Get short identifier for UIs
+const shortId = getShortId(publicKey); // e.g., "nn3ui8w2"
+
+// Get SHA-256 fingerprint
+const fingerprint = getFingerprint(publicKey);
+
+// Validate key pair
+const isValid = isValidKeyPair(privateKey, publicKey, 'ed25519');
+```
+## Signer & Key Units
+
+For advanced use cases, create intelligent units that can teach each other capabilities.
+
+### Basic Signer Usage
+
+```typescript
+import { generateKeyPair, Signer } from '@synet/keys';
+
+// Generate keys first
+const keyPair = generateKeyPair('ed25519');
+
+// Create signer from keys
+const signer = Signer.create(
+  keyPair.privateKey,  // required
+  keyPair.publicKey,   // required
+  'ed25519',
+  { purpose: 'documents' }
+);
+
+// Use signer
+const signature = await signer.sign('Important document');
+const isValid = await signer.verify('Important document', signature);
 
 // Get public key
-const publicKey = signer.getPublicKey();
-console.log('Public Key:', publicKey);
+console.log('Public key:', signer.getPublicKey());
 ```
 
-### Creating Signer from Existing Keys
+### Key Units (Public-only)
 
 ```typescript
-import { Signer } from '@synet/keys';
-
-// Create signer from existing key material
-const signer = Signer.create({
-  publicKeyPEM: '-----BEGIN PUBLIC KEY-----...',
-  privateKeyPEM: '-----BEGIN PRIVATE KEY-----...',
-  keyType: 'ed25519'
-});
-
-if (signer) {
-  const signature = await signer.sign('Test data');
-  console.log('Signature:', signature);
-}
-```
-
-### Composable Key Units
-
-```typescript
-import { Signer, Key } from '@synet/keys';
-
-// Create a signer
-const signer = Signer.generate('ed25519');
-if (!signer) throw new Error('Failed to generate signer');
-
-// Create a key that learns from the signer
-const key = Key.createFromSigner(signer);
-if (!key) throw new Error('Failed to create key');
-
-// The key can now sign (learned from signer)
-const signature = await key.sign('Hello from key!');
-console.log('Key signature:', signature);
-
-// Verify using the key
-const isValid = await key.verify('Hello from key!', signature);
-console.log('Key verification:', isValid);
-```
-
-### Key Learning Pattern
-
-```typescript
-import { Signer, Key } from '@synet/keys';
-
-// signer is created from public/private key or generated new keyPair
+import { Key } from '@synet/keys';
 
 // Create a public-only key
-const publicKey = signer.getPublicKey();
-const key = Key.create(publicKey, 'ed25519');  
+const key = Key.create(keyPair.publicKey, 'ed25519');
 
-// Key can verify but not sign initially
-const canVerify = await key.verify(data, signature);
-console.log('Can verify:', canVerify);
+// Can verify signatures
+const canVerify = await key.verify('Important document', signature);
 
-// Key learns signing from a compatible signer
-const learned = await key.learn([signer.teach()]);
+// Can get key information
+console.log('Hex format:', key.getPublicKeyHex());
+console.log('Key type:', key.getKeyType());
+```
+
+### Teaching & Learning (Advanced)
+
+Keys can learn signing capabilities from Signers without accessing private keys:
+
+```typescript
+// Create a signer (holds private key)
+const signer = Signer.create(keyPair.privateKey, keyPair.publicKey, 'ed25519');
+
+// Create a public-only key
+const publicKey = Key.create(keyPair.publicKey, 'ed25519');
+
+// Key learns signing from signer (no private key transfer!)
+const capabilities = signer.teach();
+const learned = await publicKey.learn([capabilities]);
 
 if (learned) {
-  // Now the key can sign
-  const newSignature = await key.sign('New data');
-  console.log('Learned to sign:', newSignature);
+  // Now the key can sign using learned capabilities
+  const signature = await publicKey.sign('I can sign now!');
 }
 ```
+
+## Identity Integration Example
+
+Using `@synet/keys` with `@synet/did` for identity systems:
+
+```typescript
+import { generateKeyPair, Signer } from '@synet/keys';
+import { createDIDKey } from '@synet/did';
+
+// Generate keys for identity
+const keyPair = generateKeyPair('ed25519');
+
+// Create signer for signing credentials/documents
+const signer = Signer.create(
+  keyPair.privateKey,
+  keyPair.publicKey,
+  'ed25519',
+  { purpose: 'identity' }
+);
+
+// Create DID from the public key using @synet/did
+const did = createDIDKey(keyPair.publicKey, 'ed25519');
+console.log('DID:', did); // did:key:z6Mk...
+
+// Sign a document with the identity
+const document = JSON.stringify({
+  '@context': 'https://w3.org/ns/credentials/v1',
+  type: 'VerifiableCredential',
+  issuer: did,
+  credentialSubject: {
+    name: 'Alice Johnson',
+    degree: 'Computer Science'
+  }
+});
+
+const signature = await signer.sign(document);
+console.log('Document signed by DID:', did);
+
+// Verify the signature
+const isValid = await signer.verify(document, signature);
+console.log('Signature valid:', isValid);
+```
+
+This shows the typical identity workflow: generate keys → create signer → create DID → sign documents.
 
 ## API Reference
 
-### Signer Class
+### Core Functions (Battle-Tested)
 
-The primary cryptographic unit that holds private keys and performs signing operations.
+#### Key Generation
+```typescript
+generateKeyPair(keyType: KeyType, options?: { format?: 'pem' | 'hex' }): KeyPair
+isValidKeyPair(privateKey: string, publicKey: string, keyType: KeyType): boolean
+derivePublicKey(privateKeyPEM: string): string
+```
 
-#### Static Methods
+#### Format Conversion  
+```typescript
+pemToHex(pemKey: string): string
+hexToPem(hexKey: string, keyType: KeyType): string
+base64ToHex(base64Key: string): string
+detectKeyFormat(key: string): 'pem' | 'hex' | 'base64'
+toHex(key: string, keyType: KeyType): string
+```
 
-- `Signer.generate(keyType: KeyType, meta?: Record<string, unknown>): Signer | null`
+#### Utilities
+```typescript
+getShortId(publicKey: string): string
+getFingerprint(publicKey: string): string  
+getKeyAlgorithm(publicKey: string): KeyType
+```
 
-  - Generate a new signer with a fresh key pair
-  - Returns null if generation fails
-- `Signer.create(props: SignerProps): Signer | null`
+#### Direct Signing
+```typescript
+signWithKey(data: string, privateKeyPEM: string, keyType: KeyType): Promise<string>
+verifySignature(data: string, signature: string, publicKeyPEM: string, keyType: KeyType): Promise<boolean>
+```
 
-  - Create signer from existing key material
-  - Props: `{ publicKeyPEM: string, privateKeyPEM: string, keyType: KeyType, meta?: Record<string, unknown> }`
+### Intelligent Units
 
-#### Instance Methods
+#### Signer Class [🔐] - Holds Private Keys
+```typescript
+// Creation (requires existing keys)
+Signer.create(privateKeyPEM: string, publicKeyPEM: string, keyType: KeyType, meta?: object): Signer | null
 
-- `async sign(data: string): Promise<string>`
+// Operations  
+signer.sign(data: string): Promise<string>
+signer.verify(data: string, signature: string): Promise<boolean>
+signer.getPublicKey(): string
+signer.getAlgorithm(): KeyType
 
-  - Sign data and return base64 signature
-  - Throws error if signing fails
-- `async verify(data: string, signature: string): Promise<boolean>`
+// Teaching & Key extraction
+signer.teach(): TeachingCapabilities
+signer.createKey(): Key  // Extract Key unit from Signer
 
-  - Verify signature against data
-  - Returns false if verification fails
-- `getPublicKey(): string`
+// Unit interface
+signer.execute(instruction: string, context?: object): Promise<unknown>
+signer.capabilities(): string[]
+```
 
-  - Get the public key in PEM format
-- `getAlgorithm(): KeyType`
+#### Key Class [🔑] - Public Keys + Learning
+```typescript
+// Creation
+Key.create(publicKeyPEM: string, keyType: KeyType, meta?: object): Key | null
+Key.createFromSigner(signer: Signer): Key | null
 
-  - Get the key algorithm type
-- `teach()`
+// Operations (verify always available, sign only after learning)
+key.verify(data: string, signature: string): Promise<boolean> 
+key.sign(data: string): Promise<string>  // Requires learning first
+key.getPublicKey(): string
+key.getPublicKeyHex(): string
+key.getKeyType(): KeyType
 
-  - Expose signing capabilities for learning by Key units
+// Learning
+key.learn(capabilities: TeachingCapabilities[]): Promise<boolean>
+key.useSigner(signer: ISigner): boolean
+key.teach(): TeachingCapabilities
 
-#### Unit Methods
+// Unit interface  
+key.execute(instruction: string, context?: object): Promise<unknown>
+key.capabilities(): string[]
+```
 
-- `async execute(instruction: string, context?: Record<string, unknown>): Promise<unknown>`
-
-  - Execute signing operations via unit interface
-- `capabilities(): string[]`
-
-  - List available capabilities
-
-### Key Class
-
-A public-facing unit that can learn signing capabilities from Signer units.
-
-#### Static Methods
-
-- `Key.create(publicKeyPEM: string, keyType: KeyType, meta?: Record<string, unknown>): Key | null`
-
-  - Create a public-only key
-- `Key.createFromSigner(signer: Signer): Key | null`
-
-  - Create a key that immediately learns from a signer
-- `Key.createPublic(publicKeyPEM: string, keyType: KeyType, meta?: Record<string, unknown>): Key | null`
-
-  - Alias for `Key.create()` for clarity
-- `Key.getType()` for clarity
-  - Get key type 
-
-#### Instance Methods
-
-- `async sign(data: string): Promise<string>`
-
-  - Sign data (only available after learning from a signer)
-  - Throws error if no signer learned or signing fails
-- `async verify(data: string, signature: string): Promise<boolean>`
-
-  - Verify signature against data
-  - Always available with public key
-- `getPublicKey(): string`
-
-  - Get the public key in PEM format
-- `getKeyType(): KeyType`
-
-  - Get the key algorithm type
-- `useSigner(signer: Signer): boolean`
-
-  - Use any ISigner to teach key how to sign.
-  - Validates public key consistency
-  - Returns true if learning successful
-  
-- `async learn([capabilities]): Promise<boolean>`
-
-  - Learn from any unit, including Signer. 
-  - Validates public key consistency
-
-#### Unit Methods
-
-- `async execute(instruction: string, context?: Record<string, unknown>): Promise<unknown>`
-
-  - Execute key operations via unit interface
-- `capabilities(): string[]`
-
-  - List available capabilities
-
-## Types
-
-### KeyType
-
-Supported cryptographic algorithms:
+### Types
 
 ```typescript
 type KeyType = 'ed25519' | 'rsa' | 'secp256k1' | 'secp256r1';
-```
 
-### ISigner
+interface KeyPair {
+  privateKey: string;    // PEM or hex format
+  publicKey: string;     // PEM or hex format  
+  type: KeyType;
+}
 
-Interface for signing implementations:
-
-```typescript
 interface ISigner {
   sign(data: string): Promise<string>;
   getPublicKey(): string;
@@ -271,74 +298,65 @@ interface ISigner {
 }
 ```
 
-Implement any logic and then create key with signing capabilities  `createFromSigner(MySigner:ISigner)`
+## Installation
 
-## Error Handling
+```bash
+npm install @synet/keys
+# For identity examples, also install:
+npm install @synet/did
+```
 
-The package follows a null-return pattern for creation methods and throws errors for operation methods:
+## Testing & Development
 
-- Creation methods (`generate`, `create`, etc.) return `null` on failure
-- Operation methods (`sign`, `verify`, etc.) throw errors on failure
-- Always check for null returns before using created instances
-
-## Security Considerations
-
-1. **Private Key Protection**: Private keys are only held by Signer units and never exposed
-2. **Public Key Validation**: Key units validate public key consistency when learning
-3. **Secure Defaults**: All algorithms use secure defaults and best practices
-4. **Memory Safety**: Private key material is handled securely within crypto operations
-
-## Testing
-
-Run the test suite:
-
+**Run the 211 tests:**
 ```bash
 cd packages/keys
-npm test
+npm test                    # Run all tests
+npm run test:coverage       # With coverage report  
+npm test -- signer.test.ts # Specific test file
 ```
 
-Run specific test files:
-
+**Production build:**
 ```bash
-npm test -- signer.test.ts
-npm test -- key.test.ts
-npm test -- integration.test.ts
+npm run build              # TypeScript compilation
+npm run prepublishOnly     # Full pipeline: lint + test + build
 ```
 
-## Examples
+## Error Handling & Safety
 
-See the `demo/` directory for complete examples:
+- **Creation methods** (`generate`, `create`) return `null` on failure
+- **Operation methods** (`sign`, `verify`) throw descriptive errors  
+- **Always validate** creation results before using instances
+- **Memory safe** private key handling with Node.js crypto
+- **Comprehensive validation** on all inputs and key material
 
-- `signer-demo.ts`: Basic signer operations
-- `key-learning-demo.ts`: Key learning patterns
-- `integration-demo.ts`: Full integration examples
+```typescript
+// Safe creation pattern
+const signer = Signer.create(privateKey, publicKey, 'ed25519');
+if (!signer) {
+  throw new Error('Failed to create signer - invalid key material');
+}
 
-## Development
-
-### Building
-
-```bash
-npm run build
+// Safe signing with error handling
+try {
+  const signature = await signer.sign('important data');
+  console.log('Signed successfully:', signature);
+} catch (error) {
+  console.error('Signing failed:', error.message);
+}
 ```
 
-### Running Demos
+## Why Choose @synet/keys?
 
-```bash
-npm run demo:signer
-npm run demo:key
-npm run demo:integration
-```
+✅ **Battle-tested reliability** - 211 tests, 87%+ coverage, real-world proven  
+✅ **Zero dependencies** - pure Node.js crypto, no supply chain risks  
+✅ **Intelligent architecture** - units that teach each other capabilities safely  
+✅ **Identity-first design** - perfect for DIDs, credentials, distributed systems  
+✅ **Format flexibility** - seamless PEM ↔ hex ↔ base64 conversions  
+✅ **Memory safe** - secure private key handling with comprehensive validation  
 
-### Type Checking
+**Perfect for:** Identity systems, credential issuance, document signing, distributed apps, DID management, and any application requiring robust cryptographic operations.
 
-```bash
-npm run type-check
-```
+---
 
-## Legacy Compatibility
-
-The package maintains compatibility with the previous API through the main exports. Legacy code will continue to work while new code can adopt the signer-first pattern.
-
-## License
-
-MIT License - see LICENSE file for details.
+MIT License - Built with ❤️ by the Synet team

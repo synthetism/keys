@@ -227,12 +227,12 @@ from Signer units through the teach/learn pattern.
         if (teaching.capabilities?.sign) {
           // Add both signing and verification capabilities dynamically
           this._addCapability('sign', teaching.capabilities.sign);
-          console.log(`[🔑] Key learned signing capability from ${teaching.unitId}`);
+          console.debug(`Key learned signing capability from ${teaching.unitId}`);
         }
         if (teaching.capabilities?.verify) {
           // Learn robust verification from Signer
           this._addCapability('verify', teaching.capabilities.verify);
-          console.log(`[🔑] Key learned verification capability from ${teaching.unitId}`);
+          console.debug(`Key learned verification capability from ${teaching.unitId}`);
         }
         if (teaching.capabilities?.sign || teaching.capabilities?.verify) {
           return true;
@@ -240,7 +240,7 @@ from Signer units through the teach/learn pattern.
       }
       return false;
     } catch (error) {
-      console.error('[🔑] Failed to learn capabilities:', error);
+      console.error('Failed to learn capabilities:', error);
       return false;
     }
   }

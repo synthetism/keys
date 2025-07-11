@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Signer } from '../src/signer';
+import { Signer, ISigner } from '../src/signer';
 import type { KeyType } from '../src/keys';
 
 describe('Signer Unit', () => {
@@ -305,6 +305,186 @@ describe('Signer Unit', () => {
         const isValid = await signer.verify(data, signature);
         expect(isValid).toBe(true);
       }
+    });
+  });
+  
+  describe('Coverage Gaps', () => {
+    describe('createWithSigner (External ISigner)', () => {
+      it('should create signer with external ISigner', () => {
+        const mockISigner: ISigner = {
+          sign: async () => 'mock-signature'
+        };
+        
+        const signer = Signer.createWithSigner(mockISigner);
+        
+        expect(signer).toBeDefined();
+        expect(signer).not.toBeNull();
+      });
+
+      it('should use external ISigner for signing', async () => {
+        let signCallCount = 0;
+        const mockISigner: ISigner = {
+          sign: async (data: string) => {
+            signCallCount++;
+            return `external-signature-${data}`;
+          }
+        };
+        
+        const signer = Signer.createWithSigner(mockISigner);
+        if (signer) {
+          const signature = await signer.sign('test data');
+          expect(signCallCount).toBe(1);
+          expect(signature).toBe('external-signature-test data');
+        }
+      });
+    });
+
+    describe('Unsupported signing operations', () => {
+      it('should handle non-signing key types gracefully in performSigning', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          expect(() => {
+            // @ts-ignore - accessing private method for testing
+            signer.performSigning('test data', signer.privateKeyPEM, 'x25519');
+          }).toThrow('X25519 is for key exchange, not signing');
+        }
+      });
+
+      it('should handle wireguard key type in performSigning', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          expect(() => {
+            // @ts-ignore - accessing private method for testing
+            signer.performSigning('test data', signer.privateKeyPEM, 'wireguard');
+          }).toThrow('WireGuard keys are for VPN, not signing');
+        }
+      });
+
+      it('should handle unsupported key type in performSigning', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          expect(() => {
+            // @ts-ignore - accessing private method for testing
+            signer.performSigning('test data', signer.privateKeyPEM, 'unsupported' as any);
+          }).toThrow('Unsupported key type for signing: unsupported');
+        }
+      });
+    });
+
+    describe('performSigning edge cases', () => {
+      it('should throw error for empty data', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          expect(() => {
+            // @ts-ignore - accessing private method for testing
+            signer.performSigning('', signer.privateKeyPEM, 'ed25519');
+          }).toThrow('Invalid input: data and privateKey are required');
+        }
+      });
+
+      it('should throw error for empty private key', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          expect(() => {
+            // @ts-ignore - accessing private method for testing
+            signer.performSigning('test data', '', 'ed25519');
+          }).toThrow('Invalid input: data and privateKey are required');
+        }
+      });
+
+      it('should handle signing errors and wrap them', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          expect(() => {
+            // @ts-ignore - accessing private method for testing  
+            signer.performSigning('test data', 'invalid-private-key', 'ed25519');
+          }).toThrow('Signing failed:');
+        }
+      });
+    });
+
+    describe('convertToPEMFormat error paths', () => {
+      it('should throw error for non-PEM hex format keys', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          expect(() => {
+            // @ts-ignore - accessing private method for testing
+            signer.convertToPEMFormat('abcdef123456', 'ed25519');
+          }).toThrow('Key format conversion needed for ed25519 key. Expected PEM format but got hex.');
+        }
+      });
+
+      it('should return PEM format keys unchanged', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          const pemKey = '-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgK...\n-----END PUBLIC KEY-----';
+          
+          // @ts-ignore - accessing private method for testing
+          const result = signer.convertToPEMFormat(pemKey, 'ed25519');
+          expect(result).toBe(pemKey);
+        }
+      });
+    });
+
+    describe('getPublicKeyHex error handling', () => {
+      it('should handle PEM to hex conversion errors gracefully', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          // @ts-ignore - accessing private property for testing
+          signer.publicKeyPEM = 'invalid-pem-data';
+          
+          const hexKey = signer.getPublicKeyHex();
+          expect(hexKey).toBeNull();
+        }
+      });
+    });
+
+    describe('isValidBase64 method', () => {
+      it('should validate correct base64 strings', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          // @ts-ignore - accessing private method for testing
+          expect(signer.isValidBase64('SGVsbG8gV29ybGQ=')).toBe(true);
+          // @ts-ignore - accessing private method for testing
+          expect(signer.isValidBase64('dGVzdA==')).toBe(true);
+        }
+      });
+
+      it('should reject invalid base64 strings', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          // @ts-ignore - accessing private method for testing
+          expect(signer.isValidBase64('invalid!')).toBe(false);
+          // @ts-ignore - accessing private method for testing
+          expect(signer.isValidBase64('😀')).toBe(false); // emoji should fail regex
+        }
+      });
+
+      it('should handle base64 validation errors gracefully', async () => {
+        const signer = await Signer.generate('ed25519');
+        if (signer) {
+          // @ts-ignore - accessing private method for testing
+          expect(signer.isValidBase64('invalid!')).toBe(false); // contains invalid chars
+          // @ts-ignore - accessing private method for testing
+          expect(signer.isValidBase64('😀')).toBe(false); // emoji should fail regex
+        }
+      });
+    });
+
+    describe('Additional getter coverage', () => {
+      it('should provide access to internal properties via getters', async () => {
+        const signer = await Signer.generate('ed25519', { testMeta: 'value' });
+        if (signer) {
+          expect(signer.id).toBeDefined();
+          expect(signer.type).toBe('ed25519');
+          expect(signer.metadata).toEqual({ testMeta: 'value' });
+          
+          // Ensure metadata is a copy, not reference
+          const meta = signer.metadata;
+          meta.newProp = 'test';
+          expect(signer.metadata).not.toHaveProperty('newProp');
+        }
+      });
     });
   });
 });
