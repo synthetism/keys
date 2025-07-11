@@ -99,4 +99,54 @@ describe('@synet/keys', () => {
       expect(() => Buffer.from(keyPair.publicKey, 'base64')).not.toThrow();
     });
   });
+
+  describe('Hex format generation', () => {
+    const hexSupportedTypes: KeyType[] = ['ed25519', 'x25519'];
+
+    for (const keyType of hexSupportedTypes) {
+      describe(`${keyType} hex format`, () => {
+        it('should generate valid hex keys', () => {
+          const keyPair = generateKeyPair(keyType, { format: 'hex' });
+          
+          expect(keyPair.type).toBe(keyType);
+          expect(keyPair.privateKey).toHaveLength(64); // 32 bytes = 64 hex chars
+          expect(keyPair.publicKey).toHaveLength(64);  // 32 bytes = 64 hex chars
+          
+          // Should be valid hex
+          expect(/^[0-9a-f]+$/.test(keyPair.privateKey)).toBe(true);
+          expect(/^[0-9a-f]+$/.test(keyPair.publicKey)).toBe(true);
+        });
+
+        it('should generate unique hex keys', () => {
+          const keyPair1 = generateKeyPair(keyType, { format: 'hex' });
+          const keyPair2 = generateKeyPair(keyType, { format: 'hex' });
+          
+          expect(keyPair1.privateKey).not.toBe(keyPair2.privateKey);
+          expect(keyPair1.publicKey).not.toBe(keyPair2.publicKey);
+        });
+
+        it('should be different from PEM format but same key material', () => {
+          const hexPair = generateKeyPair(keyType, { format: 'hex' });
+          const pemPair = generateKeyPair(keyType, { format: 'pem' });
+          
+          // Format should be different
+          expect(hexPair.publicKey).not.toBe(pemPair.publicKey);
+          expect(hexPair.privateKey).not.toBe(pemPair.privateKey);
+          
+          // But hex should be numeric only
+          expect(/^[0-9a-f]+$/.test(hexPair.publicKey)).toBe(true);
+          expect(pemPair.publicKey.includes('-----BEGIN')).toBe(true);
+        });
+      });
+    }
+
+    it('should handle RSA with default PEM format', () => {
+      // RSA doesn't support hex format, should default to PEM
+      const keyPair = generateKeyPair('rsa', { format: 'hex' });
+      
+      expect(keyPair.type).toBe('rsa');
+      expect(keyPair.publicKey.includes('-----BEGIN PUBLIC KEY-----')).toBe(true);
+      expect(keyPair.privateKey.includes('-----BEGIN PRIVATE KEY-----')).toBe(true);
+    });
+  });
 });

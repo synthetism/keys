@@ -28,7 +28,7 @@ export interface ISigner {
 
 /**
  * Signer Unit - Primary unit for key generation and signing
- * [🔐] The source of truth for cryptographic operations
+ * The source of truth for cryptographic operations
  */
 export class Signer extends Unit implements ISigner {
   private privateKeyPEM: string;

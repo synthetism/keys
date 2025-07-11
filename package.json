@@ -72,6 +72,6 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@synet/unit": "^1.0.4-dev.0"
+    "@synet/unit": "^1.0.4"
   }
 }

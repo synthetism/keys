@@ -1,4 +1,5 @@
 import * as crypto from "node:crypto";
+import { isValidBase64 } from "./verify";
 
 /**
  * Supported cryptographic key types
@@ -324,6 +325,11 @@ export function hexToPem(hexKey: string, keyType: KeyType): string | null {
 export function base64ToHex(base64Key: string): string | null {
   try {
     if (!base64Key) {
+      return null;
+    }
+    
+    // Validate base64 format first
+    if (!isValidBase64(base64Key)) {
       return null;
     }
     
