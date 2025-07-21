@@ -11,31 +11,34 @@
  * @author Synet Team
  */
 
-import { Unit, createUnitSchema, type TeachingContract } from '@synet/unit';
+import { Unit, createUnitSchema, type TeachingContract, type UnitProps } from '@synet/unit';
 import { createId } from './utils';
 import type { KeyType } from './keys';
 import * as crypto from 'node:crypto';
 
-export class Key extends Unit {
-  private _publicKeyPEM: string;
-  private _keyType: KeyType;
-  private _keyId: string;
-  private _meta: Record<string, unknown>;
+/**
+ * Configuration for creating a Key unit
+ */
+export interface KeyConfig {
+  publicKeyPEM: string;
+  keyType: KeyType;
+  meta?: Record<string, unknown>;
+}
 
-  private constructor(props: {
-    publicKeyPEM: string;
-    keyType: KeyType;
-    meta?: Record<string, unknown>;
-  }) {
-    super(createUnitSchema({
-      id: 'key-unit',
-      version: '1.0.0'
-    }));
-    
-    this._publicKeyPEM = props.publicKeyPEM;
-    this._keyType = props.keyType;
-    this._keyId = createId();
-    this._meta = { ...props.meta };
+/**
+ * Props interface for Key unit - follows Unit Architecture Doctrine
+ */
+export interface KeyProps extends UnitProps {
+  publicKeyPEM: string;
+  keyType: KeyType;
+  keyId: string;
+  meta: Record<string, unknown>;
+}
+
+export class Key extends Unit<KeyProps> {
+
+  protected constructor(props: KeyProps) {
+    super(props);
 
     // Register capabilities
     // Note: 'sign' and 'verify' capabilities are added dynamically when learned from Signer
@@ -44,46 +47,54 @@ export class Key extends Unit {
     this._addCapability('toJSON', () => this.toJSON());
   }
 
-  // Public property getters (1:1 exposure rule)
+  // Public property getters (props-based access)
   get publicKeyPEM(): string {
-    return this._publicKeyPEM;
+    return this.props.publicKeyPEM;
   }
 
   get keyType(): KeyType {
-    return this._keyType;
+    return this.props.keyType;
   }
 
   get keyId(): string {
-    return this._keyId;
+    return this.props.keyId;
   }
 
   get meta(): Record<string, unknown> {
-    return { ...this._meta };
+    return { ...this.props.meta };
   }
 
   /**
-   * Create Key unit from props
+   * Create Key unit from config
    */
-  static create(props: {
-    publicKeyPEM: string;
-    keyType: KeyType;
-    meta?: Record<string, unknown>;
-  }): Key {
+  static create(config: KeyConfig): Key {
     try {
-      if (!props.publicKeyPEM || !props.keyType) {
+      if (!config.publicKeyPEM || !config.keyType) {
         throw new Error('Invalid parameters, publicKeyPEM and keyType are required');
       }
       
       // Validate key type
       const validKeyTypes: KeyType[] = ['ed25519', 'rsa', 'secp256k1', 'x25519', 'wireguard'];
-      if (!validKeyTypes.includes(props.keyType)) {
-        throw new Error(`Invalid key type: ${props.keyType}`);
+      if (!validKeyTypes.includes(config.keyType)) {
+        throw new Error(`Invalid key type: ${config.keyType}`);
       }
       
       // Validate public key format (basic check)
-      if (!Key.isValidPublicKey(props.publicKeyPEM, props.keyType)) {
-        throw new Error(`Invalid public key format for key type: ${props.keyType}`);
+      if (!Key.isValidPublicKey(config.publicKeyPEM, config.keyType)) {
+        throw new Error(`Invalid public key format for key type: ${config.keyType}`);
       }
+      
+      const props: KeyProps = {
+        dna: createUnitSchema({
+          id: 'key-unit',
+          version: '1.0.0'
+        }),
+        publicKeyPEM: config.publicKeyPEM,
+        keyType: config.keyType,
+        keyId: createId(),
+        meta: config.meta || {},
+        created: new Date()
+      };
       
       return new Key(props);
     } catch (error) {
@@ -119,7 +130,7 @@ export class Key extends Unit {
 
   // Unit implementation
   whoami(): string {
-    return `[🔑] Key Unit - ${this._keyType} public key (${this._keyId.slice(0, 8)})`;
+    return `[🔑] Key Unit - ${this.props.keyType} public key (${this.props.keyId.slice(0, 8)})`;
   }
 
   capabilities(): string[] {
@@ -131,13 +142,13 @@ export class Key extends Unit {
 [🔑] Key Unit - Clean Public Key Carrier
 
 Identity: ${this.whoami()}
-Key Type: ${this._keyType}
-Key ID: ${this._keyId}
+Key Type: ${this.props.keyType}
+Key ID: ${this.props.keyId}
 
 Public Properties:
-  - publicKeyPEM: ${this._publicKeyPEM.substring(0, 50)}...
-  - keyType: ${this._keyType}
-  - keyId: ${this._keyId}
+  - publicKeyPEM: ${this.props.publicKeyPEM.substring(0, 50)}...
+  - keyType: ${this.props.keyType}
+  - keyId: ${this.props.keyId}
 
 Capabilities: ${this.capabilities().join(', ')}
 
@@ -150,9 +161,9 @@ from Signer units through the teach/learn pattern.
     return {
       unitId: this.dna.id,
       capabilities: {
-        getPublicKey: () => this._publicKeyPEM,
-        getKeyType: () => this._keyType,
-        getKeyId: () => this._keyId,
+        getPublicKey: () => this.props.publicKeyPEM,
+        getKeyType: () => this.props.keyType,
+        getKeyId: () => this.props.keyId,
         toJSON: () => this.toJSON(),
         sign: (...args: unknown[]) => this.sign(args[0] as string),
         verify: (...args: unknown[]) => this.verify(args[0] as string, args[1] as string),
@@ -203,17 +214,17 @@ from Signer units through the teach/learn pattern.
    * Get public key (compatibility method)
    */
   getPublicKey(): string {
-    return this._publicKeyPEM;
+    return this.props.publicKeyPEM;
   }
 
   toJSON(): Record<string, unknown> {
     return {
       unitId: this.dna.id,
-      keyId: this._keyId,
-      publicKeyPEM: this._publicKeyPEM,
-      keyType: this._keyType,
-      meta: this._meta,
-      created: this.created,
+      keyId: this.props.keyId,
+      publicKeyPEM: this.props.publicKeyPEM,
+      keyType: this.props.keyType,
+      meta: this.props.meta,
+      created: this.props.created,
       capabilities: this.capabilities()
     };
   }
