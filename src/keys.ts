@@ -276,6 +276,50 @@ export function pemToHex(pemKey: string): string | null {
 }
 
 /**
+ * Convert PEM private key to hex format
+ * @param pemKey The PEM-encoded private key
+ * @returns Hex string or null if conversion fails
+ */
+export function pemPrivateKeyToHex(pemKey: string): string | null {
+  try {
+    if (!pemKey || !pemKey.includes("-----BEGIN PRIVATE KEY-----")) {
+      return null;
+    }
+    
+    // Import the PEM private key
+    const privateKeyObj = crypto.createPrivateKey({
+      key: pemKey,
+      format: "pem",
+    });
+    
+    // Export as DER format
+    const der = privateKeyObj.export({
+      type: "pkcs8",
+      format: "der",
+    });
+    
+    const derBuffer = Buffer.from(der);
+    
+    // For Ed25519 private keys, extract the 32-byte private key from PKCS8 DER
+    // PKCS8 structure for Ed25519: ... [header] ... 04 20 [32 bytes private key]
+    if (derBuffer.length >= 32) {
+      // Find the OCTET STRING containing the private key (look for 04 20 pattern)
+      for (let i = 0; i < derBuffer.length - 33; i++) {
+        if (derBuffer[i] === 0x04 && derBuffer[i + 1] === 0x20) {
+          const privateKeyBytes = derBuffer.subarray(i + 2, i + 34);
+          return privateKeyBytes.toString("hex");
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Failed to convert PEM private key to hex:", error);
+    return null;
+  }
+}
+
+/**
  * Convert hex key to PEM format
  * @param hexKey Hex string key
  * @param keyType Key type for proper PEM formatting

@@ -74,7 +74,7 @@ describe('Key Unit - Refactored Architecture', () => {
       });
 
       it('should inherit metadata from signer', () => {
-        const metaSigner = Signer.generate('ed25519', { name: 'test-signer', purpose: 'testing' });
+        const metaSigner = Signer.generate('ed25519', { metadata: { name: 'test-signer', purpose: 'testing' } });
         if (!metaSigner) throw new Error('Failed to generate meta signer');
         
         const key = metaSigner.createKey();
@@ -191,7 +191,7 @@ describe('Key Unit - Refactored Architecture', () => {
 
     it('should demonstrate complete workflow', () => {
       // 1. Create Signer (primary cryptographic engine)
-      const mySigner = Signer.generate('ed25519', { name: 'main-signer' });
+      const mySigner = Signer.generate('ed25519',  {metadata: { name: 'main-signer' }});
       if (!mySigner) throw new Error('Failed to generate signer');
 
       // 2. Create Key from Signer (gets signing capabilities)
@@ -280,9 +280,9 @@ describe('Key Unit - Refactored Architecture', () => {
   describe('Integration Tests', () => {
     it('should work with multiple signers and keys', () => {
       // Generate multiple signers
-      const signer1 = Signer.generate('ed25519', { name: 'signer-1' });
-      const signer2 = Signer.generate('ed25519', { name: 'signer-2' });
-      
+      const signer1 = Signer.generate('ed25519', {metadata: { name: 'signer-1' }});
+      const signer2 = Signer.generate('ed25519', {metadata: { name: 'signer-2' }});
+
       if (!signer1 || !signer2) throw new Error('Failed to generate signers');
 
       // Create keys from signers
@@ -303,7 +303,7 @@ describe('Key Unit - Refactored Architecture', () => {
 
     it('should handle key creation workflow', () => {
       // Step 1: Generate Signer
-      const mySigner = Signer.generate('ed25519', { purpose: 'workflow-test' });
+      const mySigner = Signer.generate('ed25519', {metadata: { purpose: 'workflow-test' }});
       if (!mySigner) throw new Error('Failed to generate signer');
 
       // Step 2: Create Key from Signer

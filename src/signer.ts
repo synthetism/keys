@@ -492,14 +492,14 @@ Try me:
    */
   getPrivateKeyHex(): string | null {
     if (this.props.secure) {
-      console.warn('[🔐] Private key access denied - secure mode enabled');
+      console.warn('Private key access denied - secure mode enabled');
       return null;
     }
     
     try {
       return pemPrivateKeyToHex(this.props.privateKeyPEM);
     } catch (error) {
-      console.error('[🔐] Failed to convert private key to hex:', error);
+      console.error('Failed to convert private key to hex:', error);
       return null;
     }
   }

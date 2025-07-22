@@ -7,6 +7,7 @@ export {
   // Key format conversion utilities
   pemToHex,
   hexToPem,
+  pemPrivateKeyToHex,
   hexPrivateKeyToPem,
   base64ToHex,
   hexToBase64,

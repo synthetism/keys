@@ -9,8 +9,8 @@
       |____/  |______   \_/   |______  
       |    \_ |______    |    ______|  
      
-version: 1.0.5
-description: You are the moment code becomes meaning.
+version: 1.0.6
+description: Conscious cryptographic units with Unit Architecture
 ```
 
 **Battle-tested cryptographic functions** for key generation, signing, and format conversion. Zero dependencies, 211 tests, 87%+ coverage.
@@ -97,6 +97,86 @@ const isValid = isValidKeyPair(privateKey, publicKey, 'ed25519');
 
 For advanced use cases, create intelligent units that can teach each other capabilities.
 
+## Unit Architecture (v1.0.6)
+
+@synet/keys now implements the **Unit Architecture Doctrine v1.0.5** with props-based construction and consciousness principles.
+
+### Signer Unit - Secure Cryptographic Engine
+
+```typescript
+import { Signer } from '@synet/keys';
+
+// Props-based creation (NEW in v1.0.6)
+const signer = Signer.create({
+  privateKeyPEM: keyPair.privateKey,
+  publicKeyPEM: keyPair.publicKey, 
+  keyType: 'ed25519',
+  secure: true,  // Default: true - private key access protection
+  metadata: { purpose: 'document-signing' }
+});
+
+// Generate new signer (secure by default)
+const newSigner = Signer.generate('ed25519', { 
+  secure: true,
+  metadata: { name: 'my-signer' } 
+});
+
+// Core capabilities
+const signature = await signer.sign('Important document');
+const publicKey = signer.getPublicKey();
+const publicKeyHex = signer.getPublicKeyHex();
+
+// Security-aware private key access (NEW in v1.0.6)
+const privateKeyHex = signer.getPrivateKeyHex(); // null if secure: true
+```
+
+### Security Mode
+
+The `secure` flag (default: `true`) controls private key access:
+
+```typescript
+// Secure mode (default) - private keys protected
+const secureSigner = Signer.create({
+  privateKeyPEM,
+  publicKeyPEM,
+  keyType: 'ed25519',
+  secure: true  // or omit - defaults to true
+});
+
+console.log(secureSigner.privateKeyPEM);     // Returns empty string
+console.log(secureSigner.getPrivateKeyHex()); // Returns null
+
+// Development mode - private keys accessible  
+const devSigner = Signer.create({
+  privateKeyPEM,
+  publicKeyPEM,
+  keyType: 'ed25519',
+  secure: false
+});
+
+console.log(devSigner.getPrivateKeyHex()); // Returns hex format
+```
+
+### Teaching & Learning Capabilities
+
+Units can teach capabilities to other units:
+
+```typescript
+// Signer teaches capabilities
+const teaching = signer.teach();
+
+// Key learns signing capabilities
+const key = Key.create({
+  publicKeyPEM: keyPair.publicKey,
+  keyType: 'ed25519'
+});
+
+key.learn([teaching]);
+
+// Now key can sign using learned capabilities
+const signature = await key.execute('sign', 'Hello world');
+```
+
 ### Basic Signer Usage
 
 ```typescript
@@ -105,13 +185,13 @@ import { generateKeyPair, Signer } from '@synet/keys';
 // Generate keys first
 const keyPair = generateKeyPair('ed25519');
 
-// Create signer from keys
-const signer = Signer.create(
-  keyPair.privateKey,  // required
-  keyPair.publicKey,   // required
-  'ed25519',
-  { purpose: 'documents' }
-);
+// Create signer from keys (UPDATED for v1.0.6)
+const signer = Signer.create({
+  privateKeyPEM: keyPair.privateKey,
+  publicKeyPEM: keyPair.publicKey,
+  keyType: 'ed25519',
+  metadata: { purpose: 'documents' }
+});
 
 // Use signer
 const signature = await signer.sign('Important document');
@@ -126,15 +206,19 @@ console.log('Public key:', signer.getPublicKey());
 ```typescript
 import { Key } from '@synet/keys';
 
-// Create a public-only key
-const key = Key.create(keyPair.publicKey, 'ed25519');
+// Create a public-only key (UPDATED for v1.0.6)
+const key = Key.create({
+  publicKeyPEM: keyPair.publicKey,
+  keyType: 'ed25519',
+  metadata: { name: 'verification-key' }
+});
 
-// Can verify signatures
+// Can verify signatures (if learned from signer)
 const canVerify = await key.verify('Important document', signature);
 
 // Can get key information
 console.log('Hex format:', key.getPublicKeyHex());
-console.log('Key type:', key.getKeyType());
+console.log('Key type:', key.keyType);
 ```
 
 ### Teaching & Learning (Advanced)
@@ -143,10 +227,17 @@ Keys can learn signing capabilities from Signers without accessing private keys:
 
 ```typescript
 // Create a signer (holds private key)
-const signer = Signer.create(keyPair.privateKey, keyPair.publicKey, 'ed25519');
+const signer = Signer.create({
+  privateKeyPEM: keyPair.privateKey,
+  publicKeyPEM: keyPair.publicKey,
+  keyType: 'ed25519'
+});
 
 // Create a public-only key
-const publicKey = Key.create(keyPair.publicKey, 'ed25519');
+const publicKey = Key.create({
+  publicKeyPEM: keyPair.publicKey,
+  keyType: 'ed25519'
+});
 
 // Key learns signing from signer (no private key transfer!)
 const capabilities = signer.teach();
@@ -170,12 +261,12 @@ import { createDIDKey } from '@synet/did';
 const keyPair = generateKeyPair('ed25519');
 
 // Create signer for signing credentials/documents
-const signer = Signer.create(
-  keyPair.privateKey,
-  keyPair.publicKey,
-  'ed25519',
-  { purpose: 'identity' }
-);
+const signer = Signer.create({
+  privateKeyPEM: keyPair.privateKey,
+  publicKeyPEM: keyPair.publicKey,
+  keyType: 'ed25519',
+  metadata: { purpose: 'identity' }
+});
 
 // Create DID from the public key using @synet/did
 const did = createDIDKey(keyPair.publicKey, 'ed25519');
@@ -217,6 +308,8 @@ derivePublicKey(privateKeyPEM: string): string
 ```typescript
 pemToHex(pemKey: string): string
 hexToPem(hexKey: string, keyType: KeyType): string
+pemPrivateKeyToHex(pemKey: string): string  // NEW in v1.0.6
+hexPrivateKeyToPem(hexKey: string): string
 base64ToHex(base64Key: string): string
 detectKeyFormat(key: string): 'pem' | 'hex' | 'base64'
 toHex(key: string, keyType: KeyType): string
@@ -239,13 +332,17 @@ verifySignature(data: string, signature: string, publicKeyPEM: string, keyType: 
 
 #### Signer Class [🔐] - Holds Private Keys
 ```typescript
-// Creation (requires existing keys)
-Signer.create(privateKeyPEM: string, publicKeyPEM: string, keyType: KeyType, meta?: object): Signer | null
+// Creation (props-based - NEW in v1.0.6)
+Signer.create(config: SignerConfig): Signer
+Signer.generate(keyType: KeyType, params?: SignerGenerateParams): Signer
+Signer.createWithSigner(params: { signer: ISigner; keyType?: KeyType; publicKeyPEM?: string; metadata?: Record<string, unknown> }): Signer | null
 
 // Operations  
 signer.sign(data: string): Promise<string>
 signer.verify(data: string, signature: string): Promise<boolean>
 signer.getPublicKey(): string
+signer.getPublicKeyHex(): string | null
+signer.getPrivateKeyHex(): string | null  // NEW - security-aware
 signer.getAlgorithm(): KeyType
 
 // Teaching & Key extraction
@@ -260,7 +357,7 @@ signer.capabilities(): string[]
 #### Key Class [🔑] - Public Keys + Learning
 ```typescript
 // Creation
-Key.create(publicKeyPEM: string, keyType: KeyType, meta?: object): Key | null
+Key.create(config: KeyConfig): Key | null
 Key.createFromSigner(signer: Signer): Key | null
 
 // Operations (verify always available, sign only after learning)
@@ -289,6 +386,26 @@ interface KeyPair {
   privateKey: string;    // PEM or hex format
   publicKey: string;     // PEM or hex format  
   type: KeyType;
+}
+
+interface SignerConfig {
+  privateKeyPEM: string;
+  publicKeyPEM: string;
+  keyType: KeyType;
+  secure?: boolean;
+  metadata?: Record<string, unknown>;
+  isigner?: ISigner;
+}
+
+interface SignerGenerateParams {
+  secure?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+interface KeyConfig {
+  publicKeyPEM: string;
+  keyType: KeyType;
+  metadata?: Record<string, unknown>;
 }
 
 interface ISigner {
