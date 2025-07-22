@@ -6,7 +6,7 @@ describe('Signer Unit', () => {
   describe('Static Methods', () => {
     describe('generate', () => {
       it('should generate a signer with ed25519 key type', () => {
-        const signer = Signer.generate('ed25519', { name: 'test-signer' });
+        const signer = Signer.generate('ed25519', {metadata: { name: 'test-signer' }});
         
         expect(signer).toBeDefined();
         expect(signer).not.toBeNull();
@@ -15,7 +15,7 @@ describe('Signer Unit', () => {
       });
       
       it('should generate a signer with rsa key type', () => {
-        const signer = Signer.generate('rsa', { name: 'test-signer' });
+        const signer = Signer.generate('rsa', { metadata: {name: 'test-signer' }});  
         
         expect(signer).toBeDefined();
         expect(signer).not.toBeNull();
@@ -24,7 +24,7 @@ describe('Signer Unit', () => {
       });
       
       it('should generate a signer with secp256k1 key type', () => {
-        const signer = Signer.generate('secp256k1', { name: 'test-signer' });
+        const signer = Signer.generate('secp256k1', { metadata: {name: 'test-signer' }});
         
         expect(signer).toBeDefined();
         expect(signer).not.toBeNull();
@@ -33,11 +33,12 @@ describe('Signer Unit', () => {
       });
       
       it('should accept metadata', () => {
-        const meta = { name: 'test-signer', purpose: 'authentication' };
-        const signer = Signer.generate('ed25519', meta);
+        const metadata = { name: 'test-signer-accepted', purpose: 'authentication' };
+        const signer = Signer.generate('ed25519', { metadata });
         
+        console.log('Signer metadata:', signer!.metadata);
         expect(signer).not.toBeNull();
-        expect(signer!.metadata).toEqual(meta);
+        expect(signer!.metadata).toEqual(metadata);
       });
 
       it('should throw on invalid key type', () => {
@@ -49,7 +50,6 @@ describe('Signer Unit', () => {
       it('should create signer from existing key pair', () => {
         const originalSigner = Signer.generate('ed25519');
 
-        console.log('Original Signer:', originalSigner);
         expect(originalSigner).not.toBeNull();
         
         const publicKey = originalSigner!.getPublicKey();
@@ -62,10 +62,11 @@ describe('Signer Unit', () => {
           privateKeyPEM: privateKey,
           publicKeyPEM: publicKey,
           keyType: 'ed25519',
-          meta: { name: 'restored-signer' }
+          metadata: { name: 'restored-signer' }
         });
 
-        
+
+   
         expect(signer).toBeDefined();
         expect(signer).not.toBeNull();
         expect(signer!.getPublicKey()).toBe(publicKey);
@@ -77,7 +78,7 @@ describe('Signer Unit', () => {
           privateKeyPEM: 'invalid-private',
           publicKeyPEM: 'invalid-public',
           keyType: 'ed25519',
-          meta: {}
+          metadata: {}
         });
 
         // Creation succeeds but operations might fail later
@@ -92,7 +93,7 @@ describe('Signer Unit', () => {
         expect(originalSigner).not.toBeNull();
         
         const publicKey = originalSigner!.getPublicKey();
-        const privateKey = (originalSigner as any).privateKeyPEM; // Access private for testing
+        const privateKey = originalSigner!.privateKeyPEM; // Access private for testing
         
         const signer = Signer.createFromKeyPair(privateKey, publicKey, 'ed25519', { name: 'restored-signer' });
         
@@ -107,7 +108,7 @@ describe('Signer Unit', () => {
     let signer: Signer;
     
     beforeEach(() => {
-      const created = Signer.generate('ed25519', { name: 'test-signer' });
+      const created = Signer.generate('ed25519', { metadata : {name: 'test-signer' }});
       expect(created).not.toBeNull();
       signer = created!;
     });
@@ -191,7 +192,7 @@ describe('Signer Unit', () => {
       it('should teach capabilities to learner', () => {
         const teachingFunctions = signer.teach();
         
-        console.log('Teaching Functions:', teachingFunctions);
+      
         expect(teachingFunctions).toBeDefined();
         expect(typeof teachingFunctions).toBe('object');
         expect(teachingFunctions.capabilities.sign).toBeDefined();
@@ -206,7 +207,7 @@ describe('Signer Unit', () => {
     let signer: Signer;
     
     beforeEach(() => {
-      const created = Signer.generate('ed25519', { name: 'test-signer' });
+      const created = Signer.generate('ed25519', {metadata: { name: 'test-signer' }});
       expect(created).not.toBeNull();
       signer = created!;
     });
@@ -263,7 +264,7 @@ describe('Signer Unit', () => {
         let signer: Signer;
         
         beforeEach(() => {
-          const created = Signer.generate(algorithm, { name: `test-${algorithm}` });
+          const created = Signer.generate(algorithm, { metadata: { name: `test-${algorithm}` } });
           expect(created).not.toBeNull();
           signer = created!;
         });
@@ -299,7 +300,7 @@ describe('Signer Unit', () => {
         privateKeyPEM: 'corrupted-private-key',
         publicKeyPEM: 'corrupted-public-key',
         keyType: 'ed25519',
-        meta: {}
+        metadata: {}
       });
 
       // Creation succeeds but operations might fail later
@@ -335,9 +336,9 @@ describe('Signer Unit', () => {
         const mockISigner: ISigner = {
           sign: async () => 'mock-signature'
         };
-        
-        const signer = Signer.createWithSigner(mockISigner);
-        
+
+        const signer = Signer.createWithSigner({ signer: mockISigner });
+
         expect(signer).toBeDefined();
         expect(signer).not.toBeNull();
       });
@@ -351,7 +352,7 @@ describe('Signer Unit', () => {
           }
         };
         
-        const signer = Signer.createWithSigner(mockISigner);
+        const signer = Signer.createWithSigner({signer:mockISigner});
         if (signer) {
           const signature = await signer.sign('test data');
           expect(signCallCount).toBe(1);
@@ -460,52 +461,26 @@ describe('Signer Unit', () => {
       });
     });
 
-    describe('isValidBase64 method', () => {
-      it('should validate correct base64 strings', async () => {
-        const signer = await Signer.generate('ed25519');
-        if (signer) {
-          // @ts-ignore - accessing private method for testing
-          expect(signer.isValidBase64('SGVsbG8gV29ybGQ=')).toBe(true);
-          // @ts-ignore - accessing private method for testing
-          expect(signer.isValidBase64('dGVzdA==')).toBe(true);
-        }
-      });
 
-      it('should reject invalid base64 strings', async () => {
-        const signer = await Signer.generate('ed25519');
-        if (signer) {
-          // @ts-ignore - accessing private method for testing
-          expect(signer.isValidBase64('invalid!')).toBe(false);
-          // @ts-ignore - accessing private method for testing
-          expect(signer.isValidBase64('😀')).toBe(false); // emoji should fail regex
-        }
-      });
-
-      it('should handle base64 validation errors gracefully', async () => {
-        const signer = await Signer.generate('ed25519');
-        if (signer) {
-          // @ts-ignore - accessing private method for testing
-          expect(signer.isValidBase64('invalid!')).toBe(false); // contains invalid chars
-          // @ts-ignore - accessing private method for testing
-          expect(signer.isValidBase64('😀')).toBe(false); // emoji should fail regex
-        }
-      });
     });
 
     describe('Additional getter coverage', () => {
       it('should provide access to internal properties via getters', async () => {
-        const signer = await Signer.generate('ed25519', { testMeta: 'value' });
+        const signer = await Signer.generate('ed25519', { metadata : { testMeta: 'value' } });
+
         if (signer) {
+
+          console.log('Signer Metadata:', signer.metadata);
           expect(signer.id).toBeDefined();
           expect(signer.type).toBe('ed25519');
           expect(signer.metadata).toEqual({ testMeta: 'value' });
           
           // Ensure metadata is a copy, not reference
-          const meta = signer.metadata;
-          meta.newProp = 'test';
+          const metadata = signer.metadata;
+          metadata.newProp = 'test';
           expect(signer.metadata).not.toHaveProperty('newProp');
         }
       });
     });
   });
-});
+

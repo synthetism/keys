@@ -12,7 +12,7 @@
  */
 
 import { Unit, createUnitSchema, type TeachingContract, type UnitProps } from '@synet/unit';
-import { generateKeyPair, detectKeyFormat, pemToHex, type KeyType } from './keys';
+import { generateKeyPair, detectKeyFormat, pemToHex, pemPrivateKeyToHex, type KeyType } from './keys';
 import { verifySignature } from './verify';
 import { createId, base64ToBase64Url } from './utils';
 import * as crypto from 'node:crypto';
@@ -33,7 +33,8 @@ export interface SignerConfig {
   privateKeyPEM: string;
   publicKeyPEM: string;
   keyType: KeyType;
-  meta?: Record<string, unknown>;
+  secure?: boolean; // Whether to use secure signing methods
+  metadata?: Record<string, unknown>;
   isigner?: ISigner; // External signer for edge cases
 }
 
@@ -45,9 +46,15 @@ export interface SignerProps extends UnitProps {
   publicKeyPEM: string;
   keyType: KeyType;
   keyId: string;
-  meta: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  secure: boolean; // Whether to use secure signing methods
   isigner?: ISigner;
 }
+
+  interface SignerGenerateParams {
+    secure?: boolean;
+    metadata?: Record<string, unknown>;
+  }
 
 /**
  * Signer Unit - Primary unit for key generation and signing
@@ -66,6 +73,7 @@ export class Signer extends Unit<SignerProps> implements ISigner {
     });
     this._addCapability('getPublicKey', () => this.getPublicKey());
     this._addCapability('getPublicKeyHex', () => this.getPublicKeyHex());
+    this._addCapability('getPrivateKeyHex', () => this.getPrivateKeyHex());
     this._addCapability('verify', (...args: unknown[]) => {
       // Handle both direct strings and object with data/signature properties
       if (typeof args[0] === 'string' && typeof args[1] === 'string') {
@@ -80,12 +88,18 @@ export class Signer extends Unit<SignerProps> implements ISigner {
     this._addCapability('toJSON', () => this.toJSON());
   }
 
+ 
 
 
   /**
    * Generate new signer with fresh key pair
    */
-  static generate(keyType: KeyType, meta?: Record<string, unknown>): Signer  {
+  static generate(
+    keyType: KeyType, 
+    params: SignerGenerateParams = {}
+  ): Signer
+  {
+
     try {
       const keyPair = generateKeyPair(keyType);
       if (!keyPair || !keyPair.privateKey || !keyPair.publicKey) {
@@ -101,10 +115,12 @@ export class Signer extends Unit<SignerProps> implements ISigner {
         publicKeyPEM: keyPair.publicKey,
         keyType,
         keyId: createId(),
-        meta: meta || {},
-        created: new Date()
+        metadata: params?.metadata || {},
+        created: new Date(),
+        secure: params?.secure !== undefined ? params.secure : false,
       };
       
+      console.log(`[🔐] Generated new Signer with key type: ${keyType}, secure: ${props.secure} metadata: ${JSON.stringify(props.metadata)}`);
       return new Signer(props);
     } catch (error) {
       console.error('[🔐] Failed to generate signer:', error);
@@ -131,8 +147,9 @@ export class Signer extends Unit<SignerProps> implements ISigner {
         publicKeyPEM: config.publicKeyPEM,
         keyType: config.keyType,
         keyId: createId(),
-        meta: config.meta || {},
-        created: new Date()
+        metadata: config.metadata || {},
+        created: new Date(),
+        secure: config.secure || true, // Use secure signing methods if specified
       };
       
       return new Signer(props);
@@ -149,13 +166,13 @@ export class Signer extends Unit<SignerProps> implements ISigner {
     privateKeyPEM: string,
     publicKeyPEM: string,
     keyType: KeyType,
-    meta?: Record<string, unknown>
+    metadata?: Record<string, unknown>
   ): Signer | null {
     return Signer.create({
       privateKeyPEM,
       publicKeyPEM,
       keyType,
-      meta
+      metadata
     });
   }
 
@@ -163,12 +180,18 @@ export class Signer extends Unit<SignerProps> implements ISigner {
    * Create signer with external ISigner (edge case)
    * For cases where signing logic is handled externally
    */
-  static createWithSigner(isigner: ISigner, keyType: KeyType = 'ed25519', meta?: Record<string, unknown>): Signer | null {
+  static createWithSigner(params: {
+    signer: ISigner;
+    keyType?: KeyType;
+    publicKeyPEM?: string;
+    metadata?: Record<string, unknown>;
+  }): Signer | null {
     try {
       // Create a Signer with external signing capability
-      // Note: Public key should be provided in meta if needed
-      const publicKeyPEM = meta?.publicKeyPEM as string || '';
-      
+      // Note: Public key should be provided in metadata if needed
+      const publicKeyPEM = params.publicKeyPEM as string || '';
+
+      const keyType = params.keyType || 'ed25519';
       const props: SignerProps = {
         dna: createUnitSchema({
           id: 'signer',
@@ -178,9 +201,10 @@ export class Signer extends Unit<SignerProps> implements ISigner {
         publicKeyPEM,
         keyType,
         keyId: createId(),
-        meta: meta || {},
-        isigner,
-        created: new Date()
+        metadata: params.metadata || {},
+        isigner: params.signer,
+        created: new Date(),
+        secure: true,
       };
       
       return new Signer(props);
@@ -209,6 +233,8 @@ Algorithm: ${this.props.keyType}
 Core Capabilities:
 - sign(data): Sign data with private key
 - getPublicKey(): Get public key for sharing  
+- getPublicKeyHex(): Get public key in hex format
+- getPrivateKeyHex(): Get private key in hex format (secure mode dependent)
 - verify(data, signature): Verify signatures
 - getAlgorithm(): Get signing algorithm
 - getKey(): Get data needed to create associated Key unit
@@ -241,6 +267,7 @@ Try me:
         sign: (...args: unknown[]) => this.sign(args[0] as string),
         getPublicKey: () => this.getPublicKey(),
         getPublicKeyHex: () => this.getPublicKeyHex(),
+        getPrivateKeyHex: () => this.getPrivateKeyHex(),
         verify: (...args: unknown[]) => this.verify(args[0] as string, args[1] as string),
         getAlgorithm: () => this.getAlgorithm(),
         toJSON: () => this.toJSON(),
@@ -279,7 +306,7 @@ Try me:
       const key = Key.create({
         publicKeyPEM: this.props.publicKeyPEM,
         keyType: this.props.keyType,
-        meta: { ...this.props.meta }
+        meta: { ...this.props.metadata }
       });
       
       if (key) {
@@ -346,11 +373,11 @@ Try me:
   }
 
   get metadata(): Record<string, unknown> {
-    return { ...this.props.meta };
+    return { ...this.props.metadata };
   }
 
   get privateKeyPEM(): string {
-    return this.props.privateKeyPEM;
+    return this.props.secure ? '' : this.props.privateKeyPEM;
   }
 
   get publicKeyPEM(): string {
@@ -460,22 +487,23 @@ Try me:
   }
 
   /**
-   * Validate base64 format
+   * Get private key in hex format (respects security flag)
+   * Only returns private key if secure flag is false
    */
-  private isValidBase64(str: string): boolean {
+  getPrivateKeyHex(): string | null {
+    if (this.props.secure) {
+      console.warn('[🔐] Private key access denied - secure mode enabled');
+      return null;
+    }
+    
     try {
-      // Check if string contains only valid base64 characters
-      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-      if (!base64Regex.test(str)) {
-        return false;
-      }
-      
-      // Check if the decoded and re-encoded string matches the original
-      const decoded = Buffer.from(str, 'base64');
-      const reencoded = decoded.toString('base64');
-      return reencoded === str;
-    } catch {
-      return false;
+      return pemPrivateKeyToHex(this.props.privateKeyPEM);
+    } catch (error) {
+      console.error('[🔐] Failed to convert private key to hex:', error);
+      return null;
     }
   }
+
+
+
 }
