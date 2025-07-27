@@ -97,9 +97,9 @@ const isValid = isValidKeyPair(privateKey, publicKey, 'ed25519');
 
 For advanced use cases, create intelligent units that can teach each other capabilities.
 
-## Unit Architecture (v1.0.6)
+### Unit Architecture
 
-@synet/keys now implements the **Unit Architecture Doctrine v1.0.5** with props-based construction and consciousness principles.
+@synet/keys follows the **Unit Architecture v1.0.6** with immutable, type-safe props construction.
 
 ### Signer Unit - Secure Cryptographic Engine
 
@@ -107,11 +107,12 @@ For advanced use cases, create intelligent units that can teach each other capab
 import { Signer } from '@synet/keys';
 
 // Props-based creation (NEW in v1.0.6)
+
 const signer = Signer.create({
   privateKeyPEM: keyPair.privateKey,
   publicKeyPEM: keyPair.publicKey, 
   keyType: 'ed25519',
-  secure: true,  // Default: true - private key access protection
+  secure: true,  // Default: false - private key access protection
   metadata: { purpose: 'document-signing' }
 });
 
@@ -162,8 +163,6 @@ console.log(devSigner.getPrivateKeyHex()); // Returns hex format
 Units can teach capabilities to other units:
 
 ```typescript
-// Signer teaches capabilities
-const teaching = signer.teach();
 
 // Key learns signing capabilities
 const key = Key.create({
@@ -171,10 +170,16 @@ const key = Key.create({
   keyType: 'ed25519'
 });
 
-key.learn([teaching]);
+// Signer teaches capabilities
+key.learn([Signer.teach()]);
 
-// Now key can sign using learned capabilities
-const signature = await key.execute('sign', 'Hello world');
+// Now key can sign using learned capabilities, without access to private key.
+const signature = await key.sign('sign', 'Hello world');
+
+// or execute learnt capability
+const signature = await key.execute('signer.sign', 'Hello world');
+
+
 ```
 
 ### Basic Signer Usage

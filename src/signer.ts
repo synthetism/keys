@@ -232,7 +232,7 @@ Algorithm: ${this.props.keyType}
 
 Core Capabilities:
 - sign(data): Sign data with private key
-- getPublicKey(): Get public key for sharing  
+- getPublicKey(): Get public key in PEM format
 - getPublicKeyHex(): Get public key in hex format
 - getPrivateKeyHex(): Get private key in hex format (secure mode dependent)
 - verify(data, signature): Verify signatures
@@ -244,7 +244,7 @@ Unit Operations:
 - execute(capability, ...args): Execute any capability
 - teach(): Share all capabilities with other units
 - capabilities(): List all available capabilities
-- learn(capabilities): Absorb capabilities from other units
+- learn(capabilities): Learn capabilities from other units
 
 Security Contract:
 - Private key never exposed outside unit
@@ -253,10 +253,11 @@ Security Contract:
 
 Try me:
   const signer = Signer.generate('ed25519', { name: 'my-signer' });
-  await signer.execute('sign', 'hello world');
-  const keyData = await signer.execute('getKey', { name: 'my-key' });
+  await signer.sign('hello world');
+  const keyData = await signer.getKey({ name: 'my-key' });
   // Then use Key.createFromSigner(signer, keyData.meta) separately
-  const publicKey = await signer.execute('getPublicKey');
+  const publicKey = await signer.getPublicKey();  // PEM format 
+  const privateKey = await signer.getPrivateKey(); // PEM format 
     `);
   }
 
