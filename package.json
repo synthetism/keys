@@ -1,6 +1,6 @@
 {
   "name": "@synet/keys",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Zero-dependency, secure key generation library. Supports ed25519, x25519, secp256k1, RSA, and WireGuard keys.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -1,6 +1,6 @@
 /**
  * Key Unit - Public-facing cryptographic key unit
- * [🔑] Clean unit that holds public key material and can learn signing capabilities
+ *  Clean unit that holds public key material and can learn signing capabilities
  * 
  * Design principles:
  * - Key is the public-facing unit (holds public key only)
@@ -87,7 +87,7 @@ export class Key extends Unit<KeyProps> {
       const props: KeyProps = {
         dna: createUnitSchema({
           id: 'key-unit',
-          version: '1.0.0'
+          version: '1.0.7'
         }),
         publicKeyPEM: config.publicKeyPEM,
         keyType: config.keyType,

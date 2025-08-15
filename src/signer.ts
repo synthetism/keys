@@ -109,7 +109,7 @@ export class Signer extends Unit<SignerProps> implements ISigner {
       const props: SignerProps = {
         dna: createUnitSchema({
           id: 'signer',
-          version: '1.0.0'
+          version: '1.0.7'
         }),
         privateKeyPEM: keyPair.privateKey,
         publicKeyPEM: keyPair.publicKey,

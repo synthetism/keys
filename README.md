@@ -1,6 +1,6 @@
 # @synet/keys
 
-```
+```bash
  _______ __   __ __   _ _______ _______
  |______   \_/   | \  | |______    |   
  ______|    |    |  \_| |______    |   
@@ -9,249 +9,260 @@
       |____/  |______   \_/   |______  
       |    \_ |______    |    ______|  
      
-version: 1.0.6
-description: Conscious cryptographic units with Unit Architecture
+version: 1.0.7
 ```
 
-**Battle-tested cryptographic functions** for key generation, signing, and format conversion. Zero dependencies, 211 tests, 87%+ coverage.
-
-## Why @synet/keys?
-
-✅ **Battle-tested reliability** - 211 tests, 87%+ coverage, real-world proven  
-✅ **Zero dependencies** - pure Node.js crypto, no supply chain risks  
-✅ **Format flexibility** - seamless PEM ↔ hex ↔ base64 conversions  
-✅ **Complete toolkit** - generation, signing, verification, utilities  
-
-**Supported algorithms:** Ed25519, RSA, secp256k1, X25519, WireGuard
-
-## Basic Cryptographic Functions
-
-### Key Generation
-
-```typescript
-import { generateKeyPair } from '@synet/keys';
-
-// Generate Ed25519 key pair (recommended)
-const keyPair = generateKeyPair('ed25519');
-console.log('Private key:', keyPair.privateKey); // PEM format
-console.log('Public key:', keyPair.publicKey);   // PEM format
-
-// Generate other algorithms
-const rsaKeys = generateKeyPair('rsa');
-const secp256k1Keys = generateKeyPair('secp256k1');
-
-// Generate in hex format
-const hexKeys = generateKeyPair('ed25519', { format: 'hex' });
-```
-
-### Direct Signing & Verification
-
-```typescript
-import { signWithKey, verifySignature } from '@synet/keys';
-
-const data = 'Hello, World!';
-
-// Sign with private key
-const signature = await signWithKey(data, keyPair.privateKey, 'ed25519');
-
-// Verify with public key
-const isValid = await verifySignature(data, signature, keyPair.publicKey, 'ed25519');
-console.log('Valid signature:', isValid); // true
-```
-
-### Format Conversions
-
-```typescript
-import { pemToHex, hexToPem, toHex, detectKeyFormat } from '@synet/keys';
-
-// Convert PEM to hex
-const hexKey = pemToHex(keyPair.publicKey);
-
-// Convert hex to PEM  
-const pemKey = hexToPem(hexKey, 'ed25519');
-
-// Auto-detect format and convert to hex
-const format = detectKeyFormat(someKey); // 'pem' | 'hex' | 'base64'
-const hexFormat = toHex(someKey, 'ed25519'); // always returns hex
-
-// Derive public key from private
-import { derivePublicKey } from '@synet/keys';
-const publicKey = derivePublicKey(privateKeyPem);
-```
-
-### Key Utilities
-
-```typescript
-import { getShortId, getFingerprint, isValidKeyPair } from '@synet/keys';
-
-// Get short identifier for UIs
-const shortId = getShortId(publicKey); // e.g., "nn3ui8w2"
-
-// Get SHA-256 fingerprint
-const fingerprint = getFingerprint(publicKey);
-
-// Validate key pair
-const isValid = isValidKeyPair(privateKey, publicKey, 'ed25519');
-```
-## Signer & Key Units
-
-For advanced use cases, create intelligent units that can teach each other capabilities.
-
-### Unit Architecture
-
-@synet/keys follows the **Unit Architecture v1.0.6** with immutable, type-safe props construction.
-
-### Signer Unit - Secure Cryptographic Engine
-
-```typescript
-import { Signer } from '@synet/keys';
-
-// Props-based creation (NEW in v1.0.6)
-
-const signer = Signer.create({
-  privateKeyPEM: keyPair.privateKey,
-  publicKeyPEM: keyPair.publicKey, 
-  keyType: 'ed25519',
-  secure: true,  // Default: false - private key access protection
-  metadata: { purpose: 'document-signing' }
-});
-
-// Generate new signer (secure by default)
-const newSigner = Signer.generate('ed25519', { 
-  secure: true,
-  metadata: { name: 'my-signer' } 
-});
-
-// Core capabilities
-const signature = await signer.sign('Important document');
-const publicKey = signer.getPublicKey();
-const publicKeyHex = signer.getPublicKeyHex();
-
-// Security-aware private key access (NEW in v1.0.6)
-const privateKeyHex = signer.getPrivateKeyHex(); // null if secure: true
-```
-
-### Security Mode
-
-The `secure` flag (default: `true`) controls private key access:
-
-```typescript
-// Secure mode (default) - private keys protected
-const secureSigner = Signer.create({
-  privateKeyPEM,
-  publicKeyPEM,
-  keyType: 'ed25519',
-  secure: true  // or omit - defaults to true
-});
-
-console.log(secureSigner.privateKeyPEM);     // Returns empty string
-console.log(secureSigner.getPrivateKeyHex()); // Returns null
-
-// Development mode - private keys accessible  
-const devSigner = Signer.create({
-  privateKeyPEM,
-  publicKeyPEM,
-  keyType: 'ed25519',
-  secure: false
-});
-
-console.log(devSigner.getPrivateKeyHex()); // Returns hex format
-```
-
-### Teaching & Learning Capabilities
-
-Units can teach capabilities to other units:
-
-```typescript
-
-// Key learns signing capabilities
-const key = Key.create({
-  publicKeyPEM: keyPair.publicKey,
-  keyType: 'ed25519'
-});
-
-// Signer teaches capabilities
-key.learn([Signer.teach()]);
-
-// Now key can sign using learned capabilities, without access to private key.
-const signature = await key.sign('sign', 'Hello world');
-
-// or execute learnt capability
-const signature = await key.execute('signer.sign', 'Hello world');
-
-
-```
-
-### Basic Signer Usage
+**Stop fighting with crypto libraries.** Generate keys, sign anything, teach AI agents to handle your entire PKI workflow.
 
 ```typescript
 import { generateKeyPair, Signer } from '@synet/keys';
 
-// Generate keys first
-const keyPair = generateKeyPair('ed25519');
-
-// Create signer from keys (UPDATED for v1.0.6)
-const signer = Signer.create({
-  privateKeyPEM: keyPair.privateKey,
-  publicKeyPEM: keyPair.publicKey,
-  keyType: 'ed25519',
-  metadata: { purpose: 'documents' }
-});
-
-// Use signer
-const signature = await signer.sign('Important document');
-const isValid = await signer.verify('Important document', signature);
-
-// Get public key
-console.log('Public key:', signer.getPublicKey());
-```
-
-### Key Units (Public-only)
-
-```typescript
-import { Key } from '@synet/keys';
-
-// Create a public-only key (UPDATED for v1.0.6)
-const key = Key.create({
-  publicKeyPEM: keyPair.publicKey,
-  keyType: 'ed25519',
-  metadata: { name: 'verification-key' }
-});
-
-// Can verify signatures (if learned from signer)
-const canVerify = await key.verify('Important document', signature);
-
-// Can get key information
-console.log('Hex format:', key.getPublicKeyHex());
-console.log('Key type:', key.keyType);
-```
-
-### Teaching & Learning (Advanced)
-
-Keys can learn signing capabilities from Signers without accessing private keys:
-
-```typescript
-// Create a signer (holds private key)
-const signer = Signer.create({
-  privateKeyPEM: keyPair.privateKey,
-  publicKeyPEM: keyPair.publicKey,
+// Works exactly like you'd expect
+const keys = generateKeyPair('ed25519');
+const signer = Signer.create({ 
+  privateKeyPEM: keys.privateKey,
+  publicKeyPEM: keys.publicKey,
   keyType: 'ed25519'
 });
+const signature = await signer.sign('Hello World');
 
-// Create a public-only key
+// But then it gets interesting...
+const smith = Smith.create({ ai });
+smith.learn([signer.teach()]); // Now Smith can sign anything
+await smith.run("Generate new identity keys, sign all documents in ./contracts");
+```
+
+## Why This Exists
+
+You've been there:
+- Wrestling with Node's crypto module for basic key operations
+- Converting between PEM, hex, base64 formats manually
+- Writing the same signing/verification code over and over
+- No clean way to use crypto operations with AI agents
+- Identity systems that are painful to build
+
+**Then AI agents happened.** And suddenly you need crypto that can teach itself to AI.
+
+This is that library.
+
+## Battle-Tested Foundation
+
+- **211 tests** with 87%+ coverage
+- **Zero dependencies** - pure Node.js crypto
+- **Production proven** - running in real identity systems
+- **Memory safe** - proper private key handling
+
+**Supported:** Ed25519, RSA, secp256k1, X25519, format conversions
+
+## Quick Start
+
+```bash
+npm install @synet/keys
+```
+
+```typescript
+import { generateKeyPair, Signer, signWithKey } from '@synet/keys';
+
+// Option 1: Simple functions (get started fast)
+const keys = generateKeyPair('ed25519');
+const signature = await signWithKey('data', keys.privateKey, 'ed25519');
+
+// Option 2: Signer approach (more control)
+const signer = Signer.create({
+  privateKeyPEM: keys.privateKey,
+  publicKeyPEM: keys.publicKey,
+  keyType: 'ed25519'
+});
+const sig = await signer.sign('important document');
+
+// Option 3: AI agent approach (magic happens)
+const agent = Switch.create({ ai });
+agent.learn([signer.teach()]);
+await agent.run("Generate company signing keys and sign all legal documents");
+```
+
+## Real-World Examples
+
+### Identity Systems That Actually Work
+```typescript
+import { generateKeyPair, Signer } from '@synet/keys';
+
+// Generate identity keys
+const identityKeys = generateKeyPair('ed25519');
+
+// Create secure signer (private keys protected)
+const identitySigner = Signer.create({
+  privateKeyPEM: identityKeys.privateKey,
+  publicKeyPEM: identityKeys.publicKey,
+  keyType: 'ed25519',
+  secure: true, // Private key access blocked
+  metadata: { purpose: 'user-identity' }
+});
+
+// Sign user credentials
+const credential = {
+  userId: 'user123',
+  role: 'admin',
+  expires: Date.now() + 86400000
+};
+
+const signature = await identitySigner.sign(JSON.stringify(credential));
+```
+
+### Document Signing Workflows
+```typescript
+// Contract signing system
+const contractSigner = Signer.generate('ed25519', {
+  secure: true,
+  metadata: { purpose: 'legal-contracts' }
+});
+
+// Sign multiple documents
+const documents = ['contract-1.pdf', 'contract-2.pdf', 'nda.pdf'];
+const signatures = await Promise.all(
+  documents.map(doc => contractSigner.sign(doc))
+);
+
+// Verification is always available
+const isValid = await contractSigner.verify('contract-1.pdf', signatures[0]);
+```
+
+### AI Agent Integration
+```typescript
+import { Smith } from '@synet/agent';
+
+const signer = Signer.generate('ed25519');
+const agent = Smith.create({ ai });
+
+// Teach the agent to sign things
+agent.learn([signer.teach()]);
+
+// Let AI handle your PKI
+await agent.run(`
+  1. Generate new signing keys for each department
+  2. Sign all pending contracts in ./legal/pending
+  3. Create a key management report
+  4. Set up automatic key rotation schedule
+`);
+```
+## Features You'll Actually Use
+
+### Smart Key Generation
+```typescript
+// Recommended: Ed25519 (fast, secure, small)
+const keys = generateKeyPair('ed25519');
+
+// Other algorithms when you need them
+const rsaKeys = generateKeyPair('rsa');        // Legacy compatibility
+const bitcoinKeys = generateKeyPair('secp256k1'); // Blockchain apps
+
+// Different formats
+const hexKeys = generateKeyPair('ed25519', { format: 'hex' });
+```
+
+### Format Conversion That Works
+```typescript
+import { pemToHex, hexToPem, detectKeyFormat, toHex } from '@synet/keys';
+
+// Auto-detect and convert
+const format = detectKeyFormat(someKey); // 'pem' | 'hex' | 'base64'
+const hexKey = toHex(someKey, 'ed25519'); // Always get hex
+
+// Manual conversion
+const hex = pemToHex(pemKey);
+const pem = hexToPem(hexKey, 'ed25519');
+
+// Derive public from private
+const publicKey = derivePublicKey(privateKeyPem);
+```
+
+### Key Utilities
+```typescript
+// Short IDs for UIs
+const shortId = getShortId(publicKey); // "nn3ui8w2"
+
+// Fingerprints for verification
+const fingerprint = getFingerprint(publicKey);
+
+// Validation
+const isValid = isValidKeyPair(privateKey, publicKey, 'ed25519');
+```
+
+### Security Features
+```typescript
+// Secure mode (default) - private keys protected
+const secureSigner = Signer.create({
+  privateKeyPEM: keys.privateKey,
+  publicKeyPEM: keys.publicKey,
+  keyType: 'ed25519',
+  secure: true  // Default
+});
+
+// Private key access blocked
+console.log(secureSigner.getPrivateKeyHex()); // null
+
+// Development mode - private keys accessible  
+const devSigner = Signer.create({
+  privateKeyPEM: keys.privateKey,
+  publicKeyPEM: keys.publicKey,
+  keyType: 'ed25519',
+  secure: false
+});
+
+console.log(devSigner.getPrivateKeyHex()); // actual hex key
+```
+
+## AI Agent Superpowers
+
+This is where it gets interesting. The Signer follows [Unit Architecture](https://github.com/synthetism/unit), which means:
+
+### Teaching AI Agents
+```typescript
+const teachingContract = signer.teach();
+// Contains: sign, verify methods + schemas
+
+agent.learn([signer.teach()]);
+// Agent now knows: "To sign data, call signer.sign with these parameters..."
+```
+
+### Capability Learning
+```typescript
+// Public key can learn signing from signer (without private key!)
 const publicKey = Key.create({
-  publicKeyPEM: keyPair.publicKey,
+  publicKeyPEM: keys.publicKey,
   keyType: 'ed25519'
 });
 
-// Key learns signing from signer (no private key transfer!)
-const capabilities = signer.teach();
-const learned = await publicKey.learn([capabilities]);
+publicKey.learn([signer.teach()]);
+// Now publicKey can sign through learned capabilities
+const signature = await publicKey.sign('data');
+```
 
-if (learned) {
-  // Now the key can sign using learned capabilities
-  const signature = await publicKey.sign('I can sign now!');
-}
+### Real Agent Scenarios
+```typescript
+// Scenario: Legal document workflow
+await agent.run(`
+  1. Generate signing keys for new client
+  2. Sign all contracts in ./legal/pending
+  3. Create signature verification manifest
+  4. Email signed documents to client
+`);
+
+// Scenario: Certificate authority
+await agent.run(`
+  1. Generate root CA key pair
+  2. Create intermediate certificates for each department
+  3. Sign employee identity certificates
+  4. Set up automatic renewal schedule
+`);
+
+// Scenario: Blockchain application
+await agent.run(`
+  1. Generate secp256k1 wallet keys
+  2. Sign transaction for token transfer
+  3. Verify signatures on incoming transactions
+  4. Generate wallet backup with recovery phrase
+`);
 ```
 
 ## Identity Integration Example
@@ -333,9 +344,7 @@ signWithKey(data: string, privateKeyPEM: string, keyType: KeyType): Promise<stri
 verifySignature(data: string, signature: string, publicKeyPEM: string, keyType: KeyType): Promise<boolean>
 ```
 
-### Intelligent Units
-
-#### Signer Class [🔐] - Holds Private Keys
+#### Signer Class - Holds Private Keys
 ```typescript
 // Creation (props-based - NEW in v1.0.6)
 Signer.create(config: SignerConfig): Signer
@@ -359,7 +368,7 @@ signer.execute(instruction: string, context?: object): Promise<unknown>
 signer.capabilities(): string[]
 ```
 
-#### Key Class [🔑] - Public Keys + Learning
+#### Key Class - Public Keys + Learning
 ```typescript
 // Creation
 Key.create(config: KeyConfig): Key | null
@@ -430,7 +439,7 @@ npm install @synet/did
 
 ## Testing & Development
 
-**Run the 211 tests:**
+**Run the tests:**
 ```bash
 cd packages/keys
 npm test                    # Run all tests
@@ -467,17 +476,6 @@ try {
   console.error('Signing failed:', error.message);
 }
 ```
-
-## Why Choose @synet/keys?
-
-✅ **Battle-tested reliability** - 211 tests, 87%+ coverage, real-world proven  
-✅ **Zero dependencies** - pure Node.js crypto, no supply chain risks  
-✅ **Intelligent architecture** - units that teach each other capabilities safely  
-✅ **Identity-first design** - perfect for DIDs, credentials, distributed systems  
-✅ **Format flexibility** - seamless PEM ↔ hex ↔ base64 conversions  
-✅ **Memory safe** - secure private key handling with comprehensive validation  
-
-**Perfect for:** Identity systems, credential issuance, document signing, distributed apps, DID management, and any application requiring robust cryptographic operations.
 
 ---
 
